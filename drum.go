@@ -8,14 +8,14 @@ import (
 )
 
 type DRUM interface {
-	Check(key uint64, aux string)
-	Update(key uint64, value, aux string)
-	CheckAndUpdate(key uint64, value, aux string)
+	Check(key uint64, aux []byte)
+	Update(key uint64, value, aux []byte)
+	CheckAndUpdate(key uint64, value, aux []byte)
 }
 
 type Event struct {
 	Key        uint64
-	Value, Aux string
+	Value, Aux []byte
 }
 
 type Update Event
@@ -26,7 +26,7 @@ type UniqueKeyCheck Event
 
 type Compound struct {
 	Key      uint64
-	Value    string
+	Value    []byte
 	Op       byte
 	Position int
 	Result   byte
@@ -39,24 +39,26 @@ type drum struct {
 	buckets    int
 	elements   int
 
-	auxBuffers          [][]string
+	auxBuffers          [][][]byte
 	kvBuffers           [][]*Compound
 	fileNames           [][2]string
 	currentPointers     [][2]int64
 	nextBufferPosisions []int
 	size                int64
 
+	buf [8]byte
+
 	db DB
 
 	sortedMergeBuffer []*Compound
 	unsortingHelper   []int
-	unsortedAuxBuffer []string
+	unsortedAuxBuffer [][]byte
 }
 
 type DB interface {
 	Has(uint64) bool
-	Put(uint64, string)
-	Get(uint64) string
+	Put(uint64, []byte)
+	Get(uint64) []byte
 	Sync()
 }
 
@@ -74,23 +76,20 @@ func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
 	written := d.currentPointers[bucket][0]
 
 	for pos, _ := kv.Seek(0, io.SeekCurrent); pos < written; pos, _ = kv.Seek(0, io.SeekCurrent) {
-		d.sortedMergeBuffer = append(d.sortedMergeBuffer, &Compound{})
+		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(Compound))
 		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
 		element.Position = len(d.sortedMergeBuffer) - 1
 
-		b := make([]byte, 1)
-		kv.Read(b)
-		element.Op = b[0]
+		kv.Read(d.buf[0:1])
+		element.Op = d.buf[0]
 
-		b = make([]byte, 8)
-		kv.Read(b)
-		element.Key = binary.BigEndian.Uint64(b)
+		kv.Read(d.buf[:])
+		element.Key = binary.BigEndian.Uint64(d.buf[:])
 
-		b = make([]byte, 1)
-		kv.Read(b)
-		b = make([]byte, b[0])
-		kv.Read(b)
-		element.Value = string(b)
+		kv.Read(d.buf[:])
+
+		element.Value = make([]byte, binary.BigEndian.Uint64(d.buf[:]))
+		kv.Read(element.Value)
 	}
 }
 
@@ -120,7 +119,11 @@ func (d *drum) synchronizeWithDisk() {
 }
 
 func (d *drum) unsortMergeBuffer() {
-	d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)] // or append TODO
+	if cap(d.unsortingHelper) >= len(d.sortedMergeBuffer) {
+		d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)]
+	} else {
+		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer) - len(d.unsortingHelper))...)
+	} // resize
 	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
@@ -136,12 +139,11 @@ func (d *drum) readAuxBucketForDispatching(bucket int) {
 	auxWritten := d.currentPointers[bucket][1]
 
 	for pos, _ := aux.Seek(0, io.SeekCurrent); pos < auxWritten; pos, _ = aux.Seek(0, io.SeekCurrent) {
-		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, "") // push back
-		buf := make([]byte, 1)                                // read size of next aux file
-		aux.Read(buf)
-		serial := make([]byte, buf[0])
+		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil) // push back
+		aux.Read(d.buf[:])
+		serial := make([]byte, binary.BigEndian.Uint64(d.buf[:]))
 		aux.Read(serial)
-		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = string(serial)
+		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = serial
 	}
 }
 
@@ -195,7 +197,7 @@ func (d *drum) dispatch() {
 func (d *drum) resetSynchronizationBuffers() {
 	d.sortedMergeBuffer = make([]*Compound, 0, d.elements)
 	d.unsortingHelper = make([]int, 0, d.elements)
-	d.unsortedAuxBuffer = make([]string, 0, d.elements)
+	d.unsortedAuxBuffer = make([][]byte, 0, d.elements)
 }
 
 func (d *drum) resetFilePointers() {
@@ -230,7 +232,7 @@ func (d *drum) getBucketAndBufferPos(key uint64) (int, int) {
 	return bucket, d.nextBufferPosisions[bucket]
 }
 
-func (d *drum) add(key uint64, value string, op byte) (int, int) {
+func (d *drum) add(key uint64, value []byte, op byte) (int, int) {
 	bucket, position := d.getBucketAndBufferPos(key)
 	d.kvBuffers[bucket][position] = &Compound{
 		Key:   key,
@@ -246,19 +248,19 @@ const (
 	CHECK_UPDATE
 )
 
-func (d *drum) Check(key uint64, aux string) {
-	bucket, position := d.add(key, "", CHECK)
+func (d *drum) Check(key uint64, aux []byte) {
+	bucket, position := d.add(key, nil, CHECK)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
 
-func (d *drum) Update(key uint64, value, aux string) {
+func (d *drum) Update(key uint64, value, aux []byte) {
 	bucket, position := d.add(key, value, UPDATE)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
 
-func (d *drum) CheckAndUpdate(key uint64, value, aux string) {
+func (d *drum) CheckAndUpdate(key uint64, value, aux []byte) {
 	bucket, position := d.add(key, value, CHECK_UPDATE)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
@@ -317,22 +319,17 @@ func (d *drum) feedBucket(bucket int) {
 	for i := 0; i < current; i += 1 {
 		element := d.kvBuffers[bucket][i]
 
-		b := make([]byte, 1)
-		b[0] = element.Op
-		kv.Write(b)
-
-		key := make([]byte, 8)
-		binary.BigEndian.PutUint64(key, element.Key)
-		kv.Write(key)
-
-		b[0] = byte(len(element.Value))
-		kv.Write(b)
-		kv.WriteString(element.Value)
-
+		d.buf[0] = element.Op
+		kv.Write(d.buf[0:1])
+		binary.BigEndian.PutUint64(d.buf[:], element.Key)
+		kv.Write(d.buf[:])
+		binary.BigEndian.PutUint64(d.buf[:], uint64(len(element.Value)))
+		kv.Write(d.buf[:])
+		kv.Write(element.Value)
 		a := d.auxBuffers[bucket][i]
-		b[0] = byte(len(element.Value))
-		aux.Write(b)
-		aux.WriteString(a)
+		binary.BigEndian.PutUint64(d.buf[:], uint64(len(a)))
+		kv.Write(d.buf[:])
+		aux.Write(a)
 	}
 
 	d.currentPointers[bucket][0], err = kv.Seek(0, io.SeekCurrent)
@@ -362,7 +359,7 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 		elements:            elements,
 		size:                size,
 		db:                  db,
-		auxBuffers:          make([][]string, buckets),    // elemenets
+		auxBuffers:          make([][][]byte, buckets),    // elemenets
 		kvBuffers:           make([][]*Compound, buckets), // elements
 		fileNames:           make([][2]string, buckets),
 		currentPointers:     make([][2]int64, buckets),
