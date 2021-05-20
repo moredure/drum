@@ -14,7 +14,7 @@ type DRUM interface {
 }
 
 type Event struct {
-	Key uint64
+	Key        uint64
 	Value, Aux string
 }
 
@@ -25,11 +25,11 @@ type DuplicateKeyCheck Event
 type UniqueKeyCheck Event
 
 type Compound struct {
-	Key uint64
-	Value string
-	Op byte
+	Key      uint64
+	Value    string
+	Op       byte
 	Position int
-	Result byte
+	Result   byte
 }
 
 type drum struct {
@@ -49,7 +49,7 @@ type drum struct {
 	db DB
 
 	sortedMergeBuffer []*Compound
-	unsortingHelper []int
+	unsortingHelper   []int
 	unsortedAuxBuffer []string
 }
 
@@ -86,7 +86,7 @@ func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
 		kv.Read(b)
 		element.Key = binary.BigEndian.Uint64(b)
 
-		b := make([]byte, 1)
+		b = make([]byte, 1)
 		kv.Read(b)
 		b = make([]byte, b[0])
 		kv.Read(b)
@@ -121,7 +121,7 @@ func (d *drum) synchronizeWithDisk() {
 
 func (d *drum) unsortMergeBuffer() {
 	d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)] // or append TODO
-	for i := 0; i < len(d.sortedMergeBuffer); i+=1 {
+	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
 }
@@ -137,17 +137,19 @@ func (d *drum) readAuxBucketForDispatching(bucket int) {
 
 	for pos, _ := aux.Seek(0, io.SeekCurrent); pos < auxWritten; pos, _ = aux.Seek(0, io.SeekCurrent) {
 		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, "") // push back
-		buf := make([]byte, 1) // read size of next aux file
+		buf := make([]byte, 1)                                // read size of next aux file
 		aux.Read(buf)
 		serial := make([]byte, buf[0])
 		aux.Read(serial)
 		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = string(serial)
 	}
 }
+
 const (
-	UNIQUE_KEY byte = iota
+	UNIQUE_KEY    byte = iota
 	DUPLICATE_KEY byte = iota
 )
+
 func (d *drum) dispatch() {
 	for i := 0; i < len(d.unsortingHelper); i += 1 {
 		idx := d.unsortingHelper[i]
@@ -161,27 +163,27 @@ func (d *drum) dispatch() {
 			}
 		} else if CHECK == e.Op && DUPLICATE_KEY == e.Result {
 			d.dispatcher <- DuplicateKeyCheck{
-				Key: e.Key,
+				Key:   e.Key,
 				Value: e.Value,
-				Aux: aux,
+				Aux:   aux,
 			}
 		} else if CHECK_UPDATE == e.Op && UNIQUE_KEY == e.Result {
 			d.dispatcher <- UniqueKeyUpdate{
-				Key: e.Key,
+				Key:   e.Key,
 				Value: e.Value,
-				Aux: aux,
+				Aux:   aux,
 			}
 		} else if CHECK_UPDATE == e.Op && DUPLICATE_KEY == e.Result {
 			d.dispatcher <- DuplicateKeyUpdate{
-				Key: e.Key,
+				Key:   e.Key,
 				Value: e.Value,
-				Aux: aux,
+				Aux:   aux,
 			}
 		} else if UPDATE == e.Op {
 			d.dispatcher <- Update{
-				Key: e.Key,
+				Key:   e.Key,
 				Value: e.Value,
-				Aux: aux,
+				Aux:   aux,
 			}
 		} else {
 			panic("not implemented")
@@ -217,7 +219,7 @@ func (d *drum) mergeBuckets() {
 	d.merge = false
 }
 
-func (d *drum) getBucketAndBufferPos (key uint64) (int, int) {
+func (d *drum) getBucketAndBufferPos(key uint64) (int, int) {
 	bucket := d.getBucketIdentififer(key)
 	d.nextBufferPosisions[bucket] += 1
 
@@ -231,9 +233,9 @@ func (d *drum) getBucketAndBufferPos (key uint64) (int, int) {
 func (d *drum) add(key uint64, value string, op byte) (int, int) {
 	bucket, position := d.getBucketAndBufferPos(key)
 	d.kvBuffers[bucket][position] = &Compound{
-		Key: key,
+		Key:   key,
 		Value: value,
-		Op: op,
+		Op:    op,
 	}
 	return bucket, position
 }
@@ -342,7 +344,7 @@ func (d *drum) feedBucket(bucket int) {
 		panic(err)
 	}
 
-	if d.currentPointers[bucket][0] - kvBegin > d.size || d.currentPointers[bucket][1] - auxBegin > d.size {
+	if d.currentPointers[bucket][0]-kvBegin > d.size || d.currentPointers[bucket][1]-auxBegin > d.size {
 		d.merge = true
 	}
 }
@@ -360,7 +362,7 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 		elements:            elements,
 		size:                size,
 		db:                  db,
-		auxBuffers:          make([][]string, buckets), // elemenets
+		auxBuffers:          make([][]string, buckets),    // elemenets
 		kvBuffers:           make([][]*Compound, buckets), // elements
 		fileNames:           make([][2]string, buckets),
 		currentPointers:     make([][2]int64, buckets),
