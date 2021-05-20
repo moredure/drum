@@ -353,14 +353,22 @@ func (d *drum) checkTimeToMerge() {
 }
 
 func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}) DRUM {
+	auxBuffers := make([][][]byte, buckets)
+	for i := range auxBuffers {
+		auxBuffers[i] = make([][]byte, elements)
+	}
+	kvBuffers := make([][]*Compound, buckets)
+	for i := range kvBuffers {
+		kvBuffers[i] = make([]*Compound, elements)
+	}
 	d := &drum{
 		dispatcher:          dispatcher,
 		buckets:             buckets,
 		elements:            elements,
 		size:                size,
 		db:                  db,
-		auxBuffers:          make([][][]byte, buckets),    // elemenets
-		kvBuffers:           make([][]*Compound, buckets), // elements
+		auxBuffers:          auxBuffers, 
+		kvBuffers:           kvBuffers,
 		fileNames:           make([][2]string, buckets),
 		currentPointers:     make([][2]int64, buckets),
 		nextBufferPosisions: make([]int, buckets),
