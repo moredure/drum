@@ -18,11 +18,11 @@ type Event struct {
 	Value, Aux []byte
 }
 
-type Update Event
-type DuplicateKeyUpdate Event
-type UniqueKeyUpdate Event
-type DuplicateKeyCheck Event
-type UniqueKeyCheck Event
+type UpdateEvent Event
+type DuplicateKeyUpdateEvent Event
+type UniqueKeyUpdateEvent Event
+type DuplicateKeyCheckEvent Event
+type UniqueKeyCheckEvent Event
 
 type Compound struct {
 	Key      uint64
@@ -101,17 +101,17 @@ func (d *drum) sortMergeBuffer() {
 
 func (d *drum) synchronizeWithDisk() {
 	for _, element := range d.sortedMergeBuffer {
-		if CHECK == element.Op || CHECK_UPDATE == element.Op {
+		if Check == element.Op || CheckUpdate == element.Op {
 			if !d.db.Has(element.Key) {
-				element.Result = UNIQUE_KEY
+				element.Result = UniqueKey
 			} else {
-				element.Result = DUPLICATE_KEY
-				if CHECK == element.Op {
+				element.Result = DuplicateKey
+				if Check == element.Op {
 					element.Value = d.db.Get(element.Key)
 				}
 			}
 		}
-		if UPDATE == element.Op || CHECK_UPDATE == element.Op {
+		if Update == element.Op || CheckUpdate == element.Op {
 			d.db.Put(element.Key, element.Value)
 		}
 	}
@@ -148,8 +148,8 @@ func (d *drum) readAuxBucketForDispatching(bucket int) {
 }
 
 const (
-	UNIQUE_KEY    byte = iota
-	DUPLICATE_KEY byte = iota
+	UniqueKey    byte = iota
+	DuplicateKey
 )
 
 func (d *drum) dispatch() {
@@ -158,31 +158,31 @@ func (d *drum) dispatch() {
 		e := d.sortedMergeBuffer[idx]
 		aux := d.unsortedAuxBuffer[i]
 
-		if CHECK == e.Op && UNIQUE_KEY == e.Result {
-			d.dispatcher <- UniqueKeyCheck{
+		if Check == e.Op && UniqueKey == e.Result {
+			d.dispatcher <- UniqueKeyCheckEvent{
 				Key: e.Key,
 				Aux: aux,
 			}
-		} else if CHECK == e.Op && DUPLICATE_KEY == e.Result {
-			d.dispatcher <- DuplicateKeyCheck{
+		} else if Check == e.Op && DuplicateKey == e.Result {
+			d.dispatcher <- DuplicateKeyCheckEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			}
-		} else if CHECK_UPDATE == e.Op && UNIQUE_KEY == e.Result {
-			d.dispatcher <- UniqueKeyUpdate{
+		} else if CheckUpdate == e.Op && UniqueKey == e.Result {
+			d.dispatcher <- UniqueKeyUpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			}
-		} else if CHECK_UPDATE == e.Op && DUPLICATE_KEY == e.Result {
-			d.dispatcher <- DuplicateKeyUpdate{
+		} else if CheckUpdate == e.Op && DuplicateKey == e.Result {
+			d.dispatcher <- DuplicateKeyUpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			}
-		} else if UPDATE == e.Op {
-			d.dispatcher <- Update{
+		} else if Update == e.Op {
+			d.dispatcher <- UpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
@@ -243,25 +243,25 @@ func (d *drum) add(key uint64, value []byte, op byte) (int, int) {
 }
 
 const (
-	CHECK byte = iota
-	UPDATE
-	CHECK_UPDATE
+	Check byte = iota
+	Update
+	CheckUpdate
 )
 
 func (d *drum) Check(key uint64, aux []byte) {
-	bucket, position := d.add(key, nil, CHECK)
+	bucket, position := d.add(key, nil, Check)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
 
 func (d *drum) Update(key uint64, value, aux []byte) {
-	bucket, position := d.add(key, value, UPDATE)
+	bucket, position := d.add(key, value, Update)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
 
 func (d *drum) CheckAndUpdate(key uint64, value, aux []byte) {
-	bucket, position := d.add(key, value, CHECK_UPDATE)
+	bucket, position := d.add(key, value, CheckUpdate)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
@@ -367,7 +367,7 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 		elements:            elements,
 		size:                size,
 		db:                  db,
-		auxBuffers:          auxBuffers, 
+		auxBuffers:          auxBuffers,
 		kvBuffers:           kvBuffers,
 		fileNames:           make([][2]string, buckets),
 		currentPointers:     make([][2]int64, buckets),
