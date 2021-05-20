@@ -1,4 +1,4 @@
-package example
+package main
 
 import (
 	"encoding/binary"
@@ -8,8 +8,7 @@ import (
 )
 
 func main() {
-	pdb, err := pebble.Open("/tmp/abc1233", &pebble.Options{
-	})
+	pdb, err := pebble.Open("/tmp/abc1233", &pebble.Options{})
 	if err != nil {
 		panic(err)
 	}
@@ -18,9 +17,9 @@ func main() {
 		db: pdb,
 	}
 	dispatcher := make(chan interface{})
-	dr := drum.NewDrum(4, 1024, 1024 * 1024 * 1024, db, dispatcher)
+	dr := drum.NewDrum(4, 8, 1024, db, dispatcher)
 	go func() {
-		dr.CheckAndUpdate()
+		dr.CheckAndUpdate(1, "", "")
 	}()
 	for k := range dispatcher {
 		fmt.Println(k)
@@ -29,7 +28,7 @@ func main() {
 
 type db struct {
 	key [8]byte
-	db *pebble.DB
+	db  *pebble.DB
 }
 
 func (d *db) Has(u uint64) bool {
@@ -45,7 +44,7 @@ func (d *db) Has(u uint64) bool {
 	return true
 }
 
-func (d *db) Put(u uint64, s string) bool {
+func (d *db) Put(u uint64, s string) {
 	binary.BigEndian.PutUint64(d.key[:], u)
 	err := d.db.Set(d.key[:], []byte(s), pebble.NoSync)
 	if err != nil {
@@ -70,5 +69,3 @@ func (d *db) Get(u uint64) string {
 func (d *db) Sync() {
 	d.db.Flush()
 }
-
-
