@@ -55,7 +55,7 @@ type drum struct {
 
 type DB interface {
 	Has(uint64) bool
-	Put(uint64, string) bool
+	Put(uint64, string)
 	Get(uint64) string
 	Sync()
 }
@@ -103,18 +103,18 @@ func (d *drum) sortMergeBuffer() {
 func (d *drum) synchronizeWithDisk() {
 	for _, element := range d.sortedMergeBuffer {
 		if CHECK == element.Op || CHECK_UPDATE == element.Op {
-	      if !d.db.Has(element.Key) {
-			  element.Result = UNIQUE_KEY
-		  } else {
-			element.Result = DUPLICATE_KEY
-	        if CHECK == element.Op {
-			  element.Value = d.db.Get(element.Key)
-	        }
-	      }
-	    }
-	    if UPDATE == element.Op || CHECK_UPDATE == element.Op {
+			if !d.db.Has(element.Key) {
+				element.Result = UNIQUE_KEY
+			} else {
+				element.Result = DUPLICATE_KEY
+				if CHECK == element.Op {
+					element.Value = d.db.Get(element.Key)
+				}
+			}
+		}
+		if UPDATE == element.Op || CHECK_UPDATE == element.Op {
 			d.db.Put(element.Key, element.Value)
-	    }
+		}
 	}
 	d.db.Sync()
 }
