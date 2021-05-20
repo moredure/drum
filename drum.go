@@ -8,7 +8,7 @@ import (
 )
 
 type DRUM interface {
-	Check(key uint64)
+	Check(key uint64, aux string)
 	Update(key uint64, value, aux string)
 	CheckAndUpdate(key uint64, value, aux string)
 }
@@ -33,17 +33,18 @@ type Compound struct {
 }
 
 type drum struct {
-	merge  bool
-	feed bool
-	ch chan interface{}
-	numBuckets int
-	bucketBufferElementsSize int
-	auxBuffers [][]string
-	kvBuffers  [][]*Compound
-	fileNames  [][2]string
-	currentPointers [][2]int64
-	bucketByteSize int64
+	merge      bool
+	feed       bool
+	dispatcher chan interface{}
+	buckets    int
+	elements   int
+
+	auxBuffers          [][]string
+	kvBuffers           [][]*Compound
+	fileNames           [][2]string
+	currentPointers     [][2]int64
 	nextBufferPosisions []int
+	size                int64
 
 	db DB
 
@@ -60,7 +61,7 @@ type DB interface {
 }
 
 func (d *drum) getBucketIdentififer(key uint64) int {
-	return int(key % uint64(d.numBuckets))
+	return int(key % uint64(d.buckets))
 }
 
 func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
@@ -73,36 +74,23 @@ func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
 	written := d.currentPointers[bucket][0]
 
 	for pos, _ := kv.Seek(0, io.SeekCurrent); pos < written; pos, _ = kv.Seek(0, io.SeekCurrent) {
-		/*
-			//It would be nice to have semantics to move the element into the container. To avoid an
-			//extra copy I insert the element and use a reference to it.
-			sorted_merge_buffer_.push_back(CompoundType());
-			CompoundType & element = sorted_merge_buffer_.back();
-	
-			//Keep track of the element's original order in file.
-			std::size_t & order = boost::tuples::get<3>(element);
-			order = sorted_merge_buffer_.size() - 1;
-	
-			//Operation.
-			char & op = boost::tuples::get<2>(element);
-			kv_file.read(&op, sizeof(char));
-	
-			//Key.
-			KeyType & key = boost::tuples::get<0>(element);
-			std::size_t key_size;
-			kv_file.read(reinterpret_cast<char*>(&key_size), sizeof(std::size_t));
-			std::vector<char> key_serial(key_size);
-			kv_file.read(&key_serial[0], key_size);
-			ElementIO<KeyType>::Deserialize(key, key_size, &key_serial[0]);
-	
-			//Value.
-			ValueType & value = boost::tuples::get<1>(element);
-			std::size_t value_size;
-			kv_file.read(reinterpret_cast<char*>(&value_size), sizeof(std::size_t));
-			std::vector<char> value_serial(value_size);
-			kv_file.read(&value_serial[0], value_size);
-			ElementIO<ValueType>::Deserialize(value, value_size, &value_serial[0]);
-		 */
+		d.sortedMergeBuffer = append(d.sortedMergeBuffer, &Compound{})
+		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
+		element.Position = len(d.sortedMergeBuffer) - 1
+
+		b := make([]byte, 1)
+		kv.Read(b)
+		element.Op = b[0]
+
+		b = make([]byte, 8)
+		kv.Read(b)
+		element.Key = binary.BigEndian.Uint64(b)
+
+		b := make([]byte, 1)
+		kv.Read(b)
+		b = make([]byte, b[0])
+		kv.Read(b)
+		element.Value = string(b)
 	}
 }
 
@@ -167,30 +155,30 @@ func (d *drum) dispatch() {
 		aux := d.unsortedAuxBuffer[i]
 
 		if CHECK == e.Op && UNIQUE_KEY == e.Result {
-			d.ch <- UniqueKeyCheck{
+			d.dispatcher <- UniqueKeyCheck{
 				Key: e.Key,
 				Aux: aux,
 			}
 		} else if CHECK == e.Op && DUPLICATE_KEY == e.Result {
-			d.ch <- DuplicateKeyCheck{
+			d.dispatcher <- DuplicateKeyCheck{
 				Key: e.Key,
 				Value: e.Value,
 				Aux: aux,
 			}
 		} else if CHECK_UPDATE == e.Op && UNIQUE_KEY == e.Result {
-			d.ch <- UniqueKeyUpdate{
+			d.dispatcher <- UniqueKeyUpdate{
 				Key: e.Key,
 				Value: e.Value,
 				Aux: aux,
 			}
 		} else if CHECK_UPDATE == e.Op && DUPLICATE_KEY == e.Result {
-			d.ch <- DuplicateKeyUpdate{
+			d.dispatcher <- DuplicateKeyUpdate{
 				Key: e.Key,
 				Value: e.Value,
 				Aux: aux,
 			}
 		} else if UPDATE == e.Op {
-			d.ch <- Update{
+			d.dispatcher <- Update{
 				Key: e.Key,
 				Value: e.Value,
 				Aux: aux,
@@ -203,19 +191,19 @@ func (d *drum) dispatch() {
 }
 
 func (d *drum) resetSynchronizationBuffers() {
-	d.sortedMergeBuffer = make([]*Compound, 0, d.bucketBufferElementsSize)
-	d.unsortingHelper = make([]int, 0, d.bucketBufferElementsSize)
-	d.unsortedAuxBuffer = make([]string, 0, d.bucketBufferElementsSize)
+	d.sortedMergeBuffer = make([]*Compound, 0, d.elements)
+	d.unsortingHelper = make([]int, 0, d.elements)
+	d.unsortedAuxBuffer = make([]string, 0, d.elements)
 }
 
 func (d *drum) resetFilePointers() {
-	for bucket := 0; bucket < d.numBuckets; bucket += 1 {
+	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.currentPointers[bucket] = [2]int64{0, 0}
 	}
 }
 
 func (d *drum) mergeBuckets() {
-	for bucket := 0; bucket < d.numBuckets; bucket += 1 {
+	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.readInfoBucketIntoMergeBuffer(bucket)
 		d.sortMergeBuffer()
 		d.synchronizeWithDisk()
@@ -233,7 +221,7 @@ func (d *drum) getBucketAndBufferPos (key uint64) (int, int) {
 	bucket := d.getBucketIdentififer(key)
 	d.nextBufferPosisions[bucket] += 1
 
-	if d.nextBufferPosisions[bucket] == d.bucketBufferElementsSize {
+	if d.nextBufferPosisions[bucket] == d.elements {
 		d.feed = true
 	}
 
@@ -282,13 +270,13 @@ func (d *drum) checkTimeToFeed() {
 }
 
 func (d *drum) resetNextBufferPositions() {
-	for bucket := 0; bucket < d.numBuckets; bucket += 1 {
+	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.nextBufferPosisions[bucket] = 0
 	}
 }
 
 func (d *drum) feedBuckets() {
-	for bucket := 0; bucket < d.numBuckets; bucket += 1 {
+	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.feedBucket(bucket)
 	}
 	d.resetNextBufferPositions()
@@ -321,11 +309,12 @@ func (d *drum) feedBucket(bucket int) {
 	if err != nil {
 		panic(err)
 	}
-	pos1, _ := kv.Seek(d.currentPointers[bucket][0], io.SeekCurrent)
-	pos2, _ := aux.Seek(d.currentPointers[bucket][1], io.SeekCurrent)
+	d.currentPointers[bucket][0], _ = kv.Seek(0, io.SeekCurrent)
+	d.currentPointers[bucket][1], _ = aux.Seek(0, io.SeekCurrent)
+
 	for i := 0; i < current; i += 1 {
 		element := d.kvBuffers[bucket][i]
-		
+
 		b := make([]byte, 1)
 		b[0] = element.Op
 		kv.Write(b)
@@ -353,7 +342,7 @@ func (d *drum) feedBucket(bucket int) {
 		panic(err)
 	}
 
-	if d.currentPointers[bucket][0] - kvBegin > d.bucketByteSize || d.currentPointers[bucket][1] - auxBegin > d.bucketByteSize {
+	if d.currentPointers[bucket][0] - kvBegin > d.size || d.currentPointers[bucket][1] - auxBegin > d.size {
 		d.merge = true
 	}
 }
@@ -364,6 +353,19 @@ func (d *drum) checkTimeToMerge() {
 	}
 }
 
-func NewDrum(buckets int, buf int, size int) DRUM {
-	return nil
+func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}) DRUM {
+	d := &drum{
+		dispatcher:          dispatcher,
+		buckets:             buckets,
+		elements:            elements,
+		size:                size,
+		db:                  db,
+		auxBuffers:          make([][]string, buckets), // elemenets
+		kvBuffers:           make([][]*Compound, buckets), // elements
+		fileNames:           make([][2]string, buckets),
+		currentPointers:     make([][2]int64, buckets),
+		nextBufferPosisions: make([]int, buckets),
+	}
+	d.resetSynchronizationBuffers()
+	return d
 }
