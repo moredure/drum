@@ -120,7 +120,7 @@ func (d *drum) synchronizeWithDisk() {
 }
 
 func (d *drum) unsortMergeBuffer() {
-	d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)] // or append
+	d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)] // or append TODO
 	for i := 0; i < len(d.sortedMergeBuffer); i+=1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
