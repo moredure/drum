@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/cockroachdb/pebble"
@@ -19,7 +20,7 @@ func main() {
 	dispatcher := make(chan interface{})
 	dr := drum.NewDrum(4, 8, 1024, db, dispatcher)
 	go func() {
-		dr.CheckAndUpdate(1, "", "")
+		dr.CheckAndUpdate(1, nil, nil)
 	}()
 	for k := range dispatcher {
 		fmt.Println(k)
@@ -44,26 +45,26 @@ func (d *db) Has(u uint64) bool {
 	return true
 }
 
-func (d *db) Put(u uint64, s string) {
+func (d *db) Put(u uint64, s []byte) {
 	binary.BigEndian.PutUint64(d.key[:], u)
-	err := d.db.Set(d.key[:], []byte(s), pebble.NoSync)
+	err := d.db.Set(d.key[:], s, pebble.NoSync)
 	if err != nil {
 		panic(err)
 	}
 	return
 }
 
-func (d *db) Get(u uint64) string {
+func (d *db) Get(u uint64) []byte {
 	binary.BigEndian.PutUint64(d.key[:], u)
 	us, closer, err := d.db.Get(d.key[:])
 	if err == pebble.ErrNotFound {
-		return ""
+		return nil
 	}
 	if err != nil {
 		panic(err)
 	}
 	defer closer.Close()
-	return string(us)
+	return bytes.Repeat(us, 1)
 }
 
 func (d *db) Sync() {
