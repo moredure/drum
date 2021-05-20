@@ -21,6 +21,7 @@ func main() {
 	dr := drum.NewDrum(4, 8, 1024, db, dispatcher)
 	go func() {
 		dr.CheckAndUpdate(1, nil, nil)
+		dr.Sync()
 	}()
 	for k := range dispatcher {
 		fmt.Println(k)
