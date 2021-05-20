@@ -24,7 +24,7 @@ type UniqueKeyUpdateEvent Event
 type DuplicateKeyCheckEvent Event
 type UniqueKeyCheckEvent Event
 
-type Compound struct {
+type keyVal struct {
 	Key      uint64
 	Value    []byte
 	Op       byte
@@ -40,7 +40,7 @@ type drum struct {
 	elements   int
 
 	auxBuffers          [][][]byte
-	kvBuffers           [][]*Compound
+	kvBuffers           [][]*keyVal
 	fileNames           [][2]string
 	currentPointers     [][2]int64
 	nextBufferPosisions []int
@@ -50,7 +50,7 @@ type drum struct {
 
 	db DB
 
-	sortedMergeBuffer []*Compound
+	sortedMergeBuffer []*keyVal
 	unsortingHelper   []int
 	unsortedAuxBuffer [][]byte
 }
@@ -76,7 +76,7 @@ func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
 	written := d.currentPointers[bucket][0]
 
 	for pos, _ := kv.Seek(0, io.SeekCurrent); pos < written; pos, _ = kv.Seek(0, io.SeekCurrent) {
-		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(Compound))
+		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(keyVal))
 		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
 		element.Position = len(d.sortedMergeBuffer) - 1
 
@@ -123,7 +123,7 @@ func (d *drum) unsortMergeBuffer() {
 		d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)]
 	} else {
 		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer) - len(d.unsortingHelper))...)
-	} // resize
+	}
 	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
@@ -139,7 +139,7 @@ func (d *drum) readAuxBucketForDispatching(bucket int) {
 	auxWritten := d.currentPointers[bucket][1]
 
 	for pos, _ := aux.Seek(0, io.SeekCurrent); pos < auxWritten; pos, _ = aux.Seek(0, io.SeekCurrent) {
-		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil) // push back
+		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil)
 		aux.Read(d.buf[:])
 		serial := make([]byte, binary.BigEndian.Uint64(d.buf[:]))
 		aux.Read(serial)
@@ -195,7 +195,7 @@ func (d *drum) dispatch() {
 }
 
 func (d *drum) resetSynchronizationBuffers() {
-	d.sortedMergeBuffer = make([]*Compound, 0, d.elements)
+	d.sortedMergeBuffer = make([]*keyVal, 0, d.elements)
 	d.unsortingHelper = make([]int, 0, d.elements)
 	d.unsortedAuxBuffer = make([][]byte, 0, d.elements)
 }
@@ -234,7 +234,7 @@ func (d *drum) getBucketAndBufferPos(key uint64) (int, int) {
 
 func (d *drum) add(key uint64, value []byte, op byte) (int, int) {
 	bucket, position := d.getBucketAndBufferPos(key)
-	d.kvBuffers[bucket][position] = &Compound{
+	d.kvBuffers[bucket][position] = &keyVal{
 		Key:   key,
 		Value: value,
 		Op:    op,
@@ -357,9 +357,9 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
 	}
-	kvBuffers := make([][]*Compound, buckets)
+	kvBuffers := make([][]*keyVal, buckets)
 	for i := range kvBuffers {
-		kvBuffers[i] = make([]*Compound, elements)
+		kvBuffers[i] = make([]*keyVal, elements)
 	}
 	d := &drum{
 		dispatcher:          dispatcher,
