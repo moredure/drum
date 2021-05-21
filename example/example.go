@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	pdb, err := pebble.Open("/tmp/database", &pebble.Options{})
+	pdb, err := pebble.Open("/tmp/database", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -17,14 +17,27 @@ func main() {
 	db := &db{
 		db: pdb,
 	}
-	dispatcher := make(chan interface{})
-	dr := drum.NewDrum(4, 8, 1024, db, dispatcher, "/tmp/buckets")
+	dispatcher := make(chan interface{}, 16)
+	dr := drum.NewDrum(2, 8, 1024, db, dispatcher, "/tmp/buckets")
 	go func() {
 		dr.CheckAndUpdate(1, nil, nil)
 		dr.Sync()
 	}()
-	for k := range dispatcher {
-		fmt.Println(k)
+	for message := range dispatcher {
+		switch _ := message.(type) {
+		case *drum.DuplicateKeyCheckEvent:
+			fmt.Println("DuplicateKeyCheckEvent")
+		case *drum.DuplicateKeyUpdateEvent:
+			fmt.Println("DuplicateKeyUpdateEvent")
+		case *drum.UniqueKeyCheckEvent:
+			fmt.Println("UniqueKeyCheckEvent")
+		case *drum.UniqueKeyUpdateEvent:
+			fmt.Println("UniqueKeyUpdateEvent")
+		case *drum.UpdateEvent:
+			fmt.Println("UpdateEvent")
+		default:
+			panic("not implemented")
+		}
 	}
 }
 
@@ -42,7 +55,7 @@ func (d *db) Has(u uint64) bool {
 	if err != nil {
 		panic(err)
 	}
-	defer closer.Close()
+	closer.Close()
 	return true
 }
 
