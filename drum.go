@@ -5,73 +5,74 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 )
 
-type DRUM interface {
-	Check(key uint64, aux []byte)
-	Update(key uint64, value, aux []byte)
-	CheckAndUpdate(key uint64, value, aux []byte)
-}
-
-type Event struct {
-	Key        uint64
-	Value, Aux []byte
-}
-
-type UpdateEvent Event
-type DuplicateKeyUpdateEvent Event
-type UniqueKeyUpdateEvent Event
-type DuplicateKeyCheckEvent Event
-type UniqueKeyCheckEvent Event
-
-type keyVal struct {
-	Key      uint64
-	Value    []byte
-	Op       byte
-	Position int
-	Result   byte
-}
-
-type drum struct {
-	merge      bool
-	feed       bool
+type DRUM struct {
 	dispatcher chan interface{}
-	buckets    int
-	elements   int
+
+	merge, feed bool
+
+	buckets, elements int
+
+	size int64
 
 	auxBuffers          [][][]byte
+
 	kvBuffers           [][]*keyVal
-	fileNames           [][2]string
+
+	fileNames           []pair
+
 	currentPointers     [][2]int64
+
 	nextBufferPosisions []int
-	size                int64
-
-	buf [8]byte
-
-	db DB
 
 	sortedMergeBuffer []*keyVal
 	unsortingHelper   []int
 	unsortedAuxBuffer [][]byte
+
+	buf [8]byte
+
+	db DB
 }
 
-type DB interface {
-	Has(uint64) bool
-	Put(uint64, []byte)
-	Get(uint64) []byte
-	Sync()
+func (d *DRUM) Check(key uint64, aux []byte) {
+	bucket, position := d.add(key, nil, Check)
+	d.auxBuffers[bucket][position] = aux
+	d.checkTimeToFeed()
 }
 
-func (d *drum) getBucketIdentififer(key uint64) int {
+func (d *DRUM) Update(key uint64, value, aux []byte) {
+	bucket, position := d.add(key, value, Update)
+	d.auxBuffers[bucket][position] = aux
+	d.checkTimeToFeed()
+}
+
+func (d *DRUM) CheckAndUpdate(key uint64, value, aux []byte) {
+	bucket, position := d.add(key, value, CheckUpdate)
+	d.auxBuffers[bucket][position] = aux
+	d.checkTimeToFeed()
+}
+
+func (d *DRUM) Sync() {
+	d.feedBuckets()
+	d.mergeBuckets()
+}
+
+func (d *DRUM) getBucket(key uint64) int {
 	return int(key % uint64(d.buckets))
 }
 
-func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
-	kv, err := os.Open(d.fileNames[bucket][0])
+func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
+	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_RDWR, 0)
 	if err != nil {
 		panic(err)
 	}
-	defer kv.Close()
+	defer func() {
+		if err := kv.Close(); err != nil {
+			panic(err)
+		}
+	}()
 
 	written := d.currentPointers[bucket][0]
 
@@ -91,15 +92,17 @@ func (d *drum) readInfoBucketIntoMergeBuffer(bucket int) {
 		element.Value = make([]byte, binary.BigEndian.Uint64(d.buf[:]))
 		kv.Read(element.Value)
 	}
+
+
 }
 
-func (d *drum) sortMergeBuffer() {
+func (d *DRUM) sortMergeBuffer() {
 	sort.Slice(d.sortedMergeBuffer, func(i, j int) bool {
 		return d.sortedMergeBuffer[i].Key < d.sortedMergeBuffer[j].Key
 	})
 }
 
-func (d *drum) synchronizeWithDisk() {
+func (d *DRUM) synchronizeWithDisk() {
 	for _, element := range d.sortedMergeBuffer {
 		if Check == element.Op || CheckUpdate == element.Op {
 			if !d.db.Has(element.Key) {
@@ -118,7 +121,7 @@ func (d *drum) synchronizeWithDisk() {
 	d.db.Sync()
 }
 
-func (d *drum) unsortMergeBuffer() {
+func (d *DRUM) unsortMergeBuffer() {
 	if cap(d.unsortingHelper) >= len(d.sortedMergeBuffer) {
 		d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)]
 	} else {
@@ -129,30 +132,41 @@ func (d *drum) unsortMergeBuffer() {
 	}
 }
 
-func (d *drum) readAuxBucketForDispatching(bucket int) {
-	aux, err := os.Open(d.fileNames[bucket][1])
+func (d *DRUM) readAuxBucketForDispatching(bucket int) {
+	aux, err := os.OpenFile(d.fileNames[bucket].Aux, os.O_RDWR, 0)
 	if err != nil {
 		panic(err)
 	}
-	defer aux.Close()
+	defer func() {
+		if err := aux.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
 
 	auxWritten := d.currentPointers[bucket][1]
 
-	for pos, _ := aux.Seek(0, io.SeekCurrent); pos < auxWritten; pos, _ = aux.Seek(0, io.SeekCurrent) {
+	for {
+		pos, err := aux.Seek(0, io.SeekCurrent)
+		if err != nil {
+			panic(err)
+		}
+		if pos < auxWritten {
+			break
+		}
 		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil)
-		aux.Read(d.buf[:])
+		if _, err := aux.Read(d.buf[:]); err != nil {
+			panic(err)
+		}
 		serial := make([]byte, binary.BigEndian.Uint64(d.buf[:]))
-		aux.Read(serial)
+		if _, err := aux.Read(serial); err != nil {
+			panic(err)
+		}
 		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = serial
 	}
 }
 
-const (
-	UniqueKey    byte = iota
-	DuplicateKey
-)
-
-func (d *drum) dispatch() {
+func (d *DRUM) dispatch() {
 	for i := 0; i < len(d.unsortingHelper); i += 1 {
 		idx := d.unsortingHelper[i]
 		e := d.sortedMergeBuffer[idx]
@@ -194,19 +208,28 @@ func (d *drum) dispatch() {
 
 }
 
-func (d *drum) resetSynchronizationBuffers() {
+func (d *DRUM) assignFileNames() {
+	for bucket := 0; bucket < d.buckets; bucket += 1 {
+		d.fileNames[bucket] = pair{
+			Kv: strconv.Itoa(bucket) + "_bucket.kv",
+			Aux: strconv.Itoa(bucket) + "_bucket.aux",
+		}
+	}
+}
+
+func (d *DRUM) resetSynchronizationBuffers() {
 	d.sortedMergeBuffer = make([]*keyVal, 0, d.elements)
 	d.unsortingHelper = make([]int, 0, d.elements)
 	d.unsortedAuxBuffer = make([][]byte, 0, d.elements)
 }
 
-func (d *drum) resetFilePointers() {
+func (d *DRUM) resetFilePointers() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.currentPointers[bucket] = [2]int64{0, 0}
 	}
 }
 
-func (d *drum) mergeBuckets() {
+func (d *DRUM) mergeBuckets() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.readInfoBucketIntoMergeBuffer(bucket)
 		d.sortMergeBuffer()
@@ -221,8 +244,8 @@ func (d *drum) mergeBuckets() {
 	d.merge = false
 }
 
-func (d *drum) getBucketAndBufferPos(key uint64) (int, int) {
-	bucket := d.getBucketIdentififer(key)
+func (d *DRUM) getBucketAndBufferPos(key uint64) (int, int) {
+	bucket := d.getBucket(key)
 	d.nextBufferPosisions[bucket] += 1
 
 	if d.nextBufferPosisions[bucket] == d.elements {
@@ -232,7 +255,7 @@ func (d *drum) getBucketAndBufferPos(key uint64) (int, int) {
 	return bucket, d.nextBufferPosisions[bucket]
 }
 
-func (d *drum) add(key uint64, value []byte, op byte) (int, int) {
+func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
 	bucket, position := d.getBucketAndBufferPos(key)
 	d.kvBuffers[bucket][position] = &keyVal{
 		Key:   key,
@@ -242,44 +265,21 @@ func (d *drum) add(key uint64, value []byte, op byte) (int, int) {
 	return bucket, position
 }
 
-const (
-	Check byte = iota
-	Update
-	CheckUpdate
-)
 
-func (d *drum) Check(key uint64, aux []byte) {
-	bucket, position := d.add(key, nil, Check)
-	d.auxBuffers[bucket][position] = aux
-	d.checkTimeToFeed()
-}
-
-func (d *drum) Update(key uint64, value, aux []byte) {
-	bucket, position := d.add(key, value, Update)
-	d.auxBuffers[bucket][position] = aux
-	d.checkTimeToFeed()
-}
-
-func (d *drum) CheckAndUpdate(key uint64, value, aux []byte) {
-	bucket, position := d.add(key, value, CheckUpdate)
-	d.auxBuffers[bucket][position] = aux
-	d.checkTimeToFeed()
-}
-
-func (d *drum) checkTimeToFeed() {
+func (d *DRUM) checkTimeToFeed() {
 	if d.feed {
 		d.feedBuckets()
 	}
 	d.checkTimeToMerge()
 }
 
-func (d *drum) resetNextBufferPositions() {
+func (d *DRUM) resetNextBufferPositions() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.nextBufferPosisions[bucket] = 0
 	}
 }
 
-func (d *drum) feedBuckets() {
+func (d *DRUM) feedBuckets() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.feedBucket(bucket)
 	}
@@ -287,23 +287,31 @@ func (d *drum) feedBuckets() {
 	d.feed = false
 }
 
-func (d *drum) feedBucket(bucket int) {
+func (d *DRUM) feedBucket(bucket int) {
 	current := d.nextBufferPosisions[bucket]
 	if current == 0 {
 		return
 	}
 
-	kv, err := os.Open(d.fileNames[bucket][0])
+	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_RDWR, 0)
 	if err != nil {
 		panic(err)
 	}
-	defer kv.Close()
+	defer func() {
+		if err := kv.Close(); err != nil {
+			panic(err)
+		}
+	}()
 
-	aux, err := os.Open(d.fileNames[bucket][1])
+	aux, err := os.OpenFile(d.fileNames[bucket].Aux, os.O_RDWR, 0)
 	if err != nil {
 		panic(err)
 	}
-	defer aux.Close()
+	defer func() {
+		if err := aux.Close(); err != nil {
+			panic(err)
+		}
+	}()
 
 	kvBegin, err := kv.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -320,16 +328,29 @@ func (d *drum) feedBucket(bucket int) {
 		element := d.kvBuffers[bucket][i]
 
 		d.buf[0] = element.Op
-		kv.Write(d.buf[0:1])
+		if _, err := kv.Write(d.buf[0:1]); err != nil {
+			panic(err)
+		}
 		binary.BigEndian.PutUint64(d.buf[:], element.Key)
-		kv.Write(d.buf[:])
+		if _, err := kv.Write(d.buf[:]); err != nil {
+			panic(err)
+		}
 		binary.BigEndian.PutUint64(d.buf[:], uint64(len(element.Value)))
-		kv.Write(d.buf[:])
-		kv.Write(element.Value)
+		if _, err := kv.Write(d.buf[:]); err != nil {
+			panic(err)
+		}
+		if _, err := kv.Write(element.Value); err != nil {
+			panic(err)
+		}
+
 		a := d.auxBuffers[bucket][i]
 		binary.BigEndian.PutUint64(d.buf[:], uint64(len(a)))
-		kv.Write(d.buf[:])
-		aux.Write(a)
+		if _, err := kv.Write(d.buf[:]); err != nil {
+			panic(err)
+		}
+		if _, err := aux.Write(a); err != nil {
+			panic(err)
+		}
 	}
 
 	d.currentPointers[bucket][0], err = kv.Seek(0, io.SeekCurrent)
@@ -346,13 +367,13 @@ func (d *drum) feedBucket(bucket int) {
 	}
 }
 
-func (d *drum) checkTimeToMerge() {
+func (d *DRUM) checkTimeToMerge() {
 	if d.merge {
 		d.mergeBuckets()
 	}
 }
 
-func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}) DRUM {
+func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}) *DRUM {
 	auxBuffers := make([][][]byte, buckets)
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
@@ -361,7 +382,7 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 	for i := range kvBuffers {
 		kvBuffers[i] = make([]*keyVal, elements)
 	}
-	d := &drum{
+	d := &DRUM{
 		dispatcher:          dispatcher,
 		buckets:             buckets,
 		elements:            elements,
@@ -369,10 +390,11 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 		db:                  db,
 		auxBuffers:          auxBuffers,
 		kvBuffers:           kvBuffers,
-		fileNames:           make([][2]string, buckets),
+		fileNames:           make([]pair, buckets),
 		currentPointers:     make([][2]int64, buckets),
 		nextBufferPosisions: make([]int, buckets),
 	}
 	d.resetSynchronizationBuffers()
+	d.assignFileNames()
 	return d
 }
