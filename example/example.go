@@ -18,7 +18,7 @@ func main() {
 		db: pdb,
 	}
 	dispatcher := make(chan interface{})
-	dr := drum.NewDrum(4, 8, 1024, db, dispatcher)
+	dr := drum.NewDrum(4, 8, 1024, db, dispatcher, "/tmp/buckets")
 	go func() {
 		dr.CheckAndUpdate(1, nil, nil)
 		dr.Sync()
