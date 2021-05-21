@@ -60,7 +60,7 @@ func (d *DRUM) Update(key uint64, value, aux []byte) {
 	d.checkTimeToFeed()
 }
 
-func (d *DRUM) CheckAndUpdate(key uint64, value, aux []byte) {
+func (d *DRUM) CheckUpdate(key uint64, value, aux []byte) {
 	bucket, position := d.add(key, value, CheckUpdate)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
