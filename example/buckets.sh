@@ -2,6 +2,8 @@
 
 rm -rf /tmp/database
 
+mkdir -p /tmp/buckets
+
 # 4 buckets 0..3 each for 1024 * 2048 bytes
 for idx in $(seq 0 7)
 do

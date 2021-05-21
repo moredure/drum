@@ -9,29 +9,6 @@ import (
 	"strconv"
 )
 
-type dispatcher struct {
-}
-
-func (d dispatcher) UniqueKeyCheckEvent(event *drum.Event) {
-	fmt.Println(event.Key)
-}
-
-func (d dispatcher) DuplicateKeyCheckEvent(event *drum.Event) {
-	fmt.Println(event.Key)
-}
-
-func (d dispatcher) UniqueKeyUpdateEvent(event *drum.Event) {
-	fmt.Println(event.Key)
-}
-
-func (d dispatcher) DuplicateKeyUpdateEvent(event *drum.Event) {
-	fmt.Println(event.Key)
-}
-
-func (d dispatcher) UpdateEvent(event *drum.Event) {
-	fmt.Println(event.Key)
-}
-
 func main() {
 	pdb, err := pebble.Open("/tmp/database", nil)
 	if err != nil {
@@ -41,11 +18,23 @@ func main() {
 	db := &db{
 		db: pdb,
 	}
-	dr := drum.NewDrum(8, 32*1024, 1024*1024, db, new(dispatcher), "/tmp/buckets")
-
-	for i := 0; i < 1000000; i += 1 {
+	counter := 0
+	dispatcherFunc := drum.DispatcherFunc(func(i interface{}) { // or use dispatcher type
+		switch i.(type) {
+		case *drum.UniqueKeyCheckEvent:
+		case *drum.DuplicateKeyCheckEvent:
+		case *drum.UniqueKeyUpdateEvent:
+			counter += 1
+		case *drum.DuplicateKeyUpdateEvent:
+		case *drum.UpdateEvent:
+		}
+	})
+	dr := drum.NewDrum(8, 32*1024, 1024*1024, db, dispatcherFunc, "/tmp/buckets")
+	for i := 0; i < 100; i += 1 {
 		dr.CheckUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 	}
+	dr.Sync()
+	fmt.Println(counter == 100)
 }
 
 type db struct {
@@ -94,4 +83,27 @@ func (d *db) Sync() {
 	if err := d.db.Flush(); err != nil {
 		panic(err)
 	}
+}
+
+type dispatcher struct {
+}
+
+func (d dispatcher) UniqueKeyCheckEvent(event *drum.UniqueKeyCheckEvent) {
+	fmt.Println("UniqueKeyCheckEvent")
+}
+
+func (d dispatcher) DuplicateKeyCheckEvent(event *drum.DuplicateKeyCheckEvent) {
+	fmt.Println("DuplicateKeyCheckEvent")
+}
+
+func (d dispatcher) UniqueKeyUpdateEvent(event *drum.UniqueKeyUpdateEvent) {
+	fmt.Println("UniqueKeyUpdateEvent")
+}
+
+func (d dispatcher) DuplicateKeyUpdateEvent(event *drum.DuplicateKeyUpdateEvent) {
+	fmt.Println("DuplicateKeyUpdateEvent")
+}
+
+func (d dispatcher) UpdateEvent(event *drum.UpdateEvent) {
+	fmt.Println("UpdateEvent")
 }

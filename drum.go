@@ -187,30 +187,30 @@ func (d *DRUM) dispatch() {
 		aux := d.unsortedAuxBuffer[i]
 
 		if Check == e.Op && UniqueKey == e.Result {
-			d.dispatcher.UniqueKeyCheckEvent(&Event{
+			d.dispatcher.UniqueKeyCheckEvent(&UniqueKeyCheckEvent{
 				Key: e.Key,
 				Aux: aux,
 			})
 		} else if Check == e.Op && DuplicateKey == e.Result {
-			d.dispatcher.DuplicateKeyCheckEvent(&Event{
+			d.dispatcher.DuplicateKeyCheckEvent(&DuplicateKeyCheckEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			})
 		} else if CheckUpdate == e.Op && UniqueKey == e.Result {
-			d.dispatcher.UniqueKeyUpdateEvent(&Event{
+			d.dispatcher.UniqueKeyUpdateEvent(&UniqueKeyUpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			})
 		} else if CheckUpdate == e.Op && DuplicateKey == e.Result {
-			d.dispatcher.DuplicateKeyUpdateEvent(&Event{
+			d.dispatcher.DuplicateKeyUpdateEvent(&DuplicateKeyUpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			})
 		} else if Update == e.Op {
-			d.dispatcher.UpdateEvent(&Event{
+			d.dispatcher.UpdateEvent(&UpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
