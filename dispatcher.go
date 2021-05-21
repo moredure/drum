@@ -29,6 +29,3 @@ func (d DispatcherFunc) DuplicateKeyUpdateEvent(event *DuplicateKeyUpdateEvent) 
 func (d DispatcherFunc) UpdateEvent(event *UpdateEvent) {
 	d(event)
 }
-
-
-

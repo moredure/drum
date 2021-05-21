@@ -11,7 +11,7 @@ import (
 )
 
 type DRUM struct {
-	filesPath string
+	bucketsPath string
 
 	dispatcher Dispatcher
 
@@ -225,8 +225,8 @@ func (d *DRUM) dispatch() {
 func (d *DRUM) assignFileNames() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.fileNames[bucket] = names{
-			Kv:  d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.kv",
-			Aux: d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.aux",
+			Kv:  d.bucketsPath + "/" + strconv.Itoa(bucket) + "_bucket.kv",
+			Aux: d.bucketsPath + "/" + strconv.Itoa(bucket) + "_bucket.aux",
 		}
 	}
 }
@@ -391,7 +391,7 @@ func (d *DRUM) checkTimeToMerge() {
 	}
 }
 
-func NewDrum(buckets int, elements int, size int64, db DB, dispatcher Dispatcher, filesPath string) *DRUM {
+func NewDrum(bucketsPath string, buckets int, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
 	auxBuffers := make([][][]byte, buckets)
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
@@ -401,7 +401,7 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher Dispatcher
 		kvBuffers[i] = make([]*element, elements)
 	}
 	d := &DRUM{
-		filesPath:           path.Clean(filesPath),
+		bucketsPath:         path.Clean(bucketsPath),
 		dispatcher:          dispatcher,
 		buckets:             buckets,
 		elements:            elements,

@@ -6,12 +6,12 @@ type (
 		Aux []byte
 	}
 	baseEvent struct {
-		Key uint64
+		Key   uint64
 		Value []byte
-		Aux []byte
+		Aux   []byte
 	}
-	DuplicateKeyCheckEvent baseEvent
-	UniqueKeyUpdateEvent baseEvent
+	DuplicateKeyCheckEvent  baseEvent
+	UniqueKeyUpdateEvent    baseEvent
 	DuplicateKeyUpdateEvent baseEvent
-	UpdateEvent baseEvent
+	UpdateEvent             baseEvent
 )

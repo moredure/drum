@@ -29,7 +29,7 @@ func main() {
 		case *drum.UpdateEvent:
 		}
 	})
-	dr := drum.NewDrum(8, 32*1024, 1024*1024, db, dispatcherFunc, "/tmp/buckets")
+	dr := drum.NewDrum("/tmp/buckets", 8, 32*1024, 1024*1024, db, dispatcherFunc)
 	for i := 0; i < 100; i += 1 {
 		dr.CheckUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 	}
