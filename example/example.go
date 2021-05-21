@@ -24,10 +24,9 @@ func main() {
 		for i := 0; i < 16; i += 1 {
 			dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 		}
-		dr.Sync()
 	}()
 	for message := range dispatcher {
-		switch _ := message.(type) {
+		switch message.(type) {
 		case *drum.DuplicateKeyCheckEvent:
 			fmt.Println("DuplicateKeyCheckEvent")
 		case *drum.DuplicateKeyUpdateEvent:
