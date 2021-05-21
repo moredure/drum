@@ -391,7 +391,7 @@ func (d *DRUM) checkTimeToMerge() {
 	}
 }
 
-func NewDrum(bucketsPath string, buckets int, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
+func Open(bucketsPath string, buckets int, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
 	auxBuffers := make([][][]byte, buckets)
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
