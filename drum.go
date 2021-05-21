@@ -13,7 +13,7 @@ import (
 type DRUM struct {
 	filesPath string
 
-	dispatcher chan interface{}
+	dispatcher Dispatcher
 
 	merge, feed bool
 
@@ -188,34 +188,34 @@ func (d *DRUM) dispatch() {
 		aux := d.unsortedAuxBuffer[i]
 
 		if Check == e.Op && UniqueKey == e.Result {
-			d.dispatcher <- &UniqueKeyCheckEvent{
+			d.dispatcher.UniqueKeyCheckEvent(&Event{
 				Key: e.Key,
 				Aux: aux,
-			}
+			})
 		} else if Check == e.Op && DuplicateKey == e.Result {
-			d.dispatcher <- &DuplicateKeyCheckEvent{
+			d.dispatcher.DuplicateKeyCheckEvent(&Event{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
-			}
+			})
 		} else if CheckUpdate == e.Op && UniqueKey == e.Result {
-			d.dispatcher <- &UniqueKeyUpdateEvent{
+			d.dispatcher.UniqueKeyUpdateEvent(&Event{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
-			}
+			})
 		} else if CheckUpdate == e.Op && DuplicateKey == e.Result {
-			d.dispatcher <- &DuplicateKeyUpdateEvent{
+			d.dispatcher.DuplicateKeyUpdateEvent(&Event{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
-			}
+			})
 		} else if Update == e.Op {
-			d.dispatcher <- &UpdateEvent{
+			d.dispatcher.UpdateEvent(&Event{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
-			}
+			})
 		} else {
 			panic("not implemented")
 		}
@@ -393,7 +393,7 @@ func (d *DRUM) checkTimeToMerge() {
 	}
 }
 
-func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}, filesPath string) *DRUM {
+func NewDrum(buckets int, elements int, size int64, db DB, dispatcher Dispatcher, filesPath string) *DRUM {
 	auxBuffers := make([][][]byte, buckets)
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
