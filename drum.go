@@ -4,11 +4,14 @@ import (
 	"encoding/binary"
 	"io"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 )
 
 type DRUM struct {
+	filesPath string
+
 	dispatcher chan interface{}
 
 	merge, feed bool
@@ -82,7 +85,7 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		if pos < d.currentPointers[bucket].Kv {
 			break
 		}
-		
+
 		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(keyVal))
 		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
 		element.Position = len(d.sortedMergeBuffer) - 1
@@ -222,8 +225,8 @@ func (d *DRUM) dispatch() {
 func (d *DRUM) assignFileNames() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.fileNames[bucket] = names{
-			Kv: strconv.Itoa(bucket) + "_bucket.kv",
-			Aux: strconv.Itoa(bucket) + "_bucket.aux",
+			Kv: d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.kv",
+			Aux: d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.aux",
 		}
 	}
 }
@@ -255,15 +258,14 @@ func (d *DRUM) mergeBuckets() {
 	d.merge = false
 }
 
-func (d *DRUM) getBucketAndBufferPos(key uint64) (int, int) {
-	bucket := d.getBucket(key)
+func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
+	bucket = d.getBucket(key)
 	d.nextBufferPosisions[bucket] += 1
-
-	if d.nextBufferPosisions[bucket] == d.elements {
+	position = d.nextBufferPosisions[bucket]
+	if position == d.elements {
 		d.feed = true
 	}
-
-	return bucket, d.nextBufferPosisions[bucket]
+	return
 }
 
 func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
@@ -390,7 +392,7 @@ func (d *DRUM) checkTimeToMerge() {
 	}
 }
 
-func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}) *DRUM {
+func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan interface{}, filesPath string) *DRUM {
 	auxBuffers := make([][][]byte, buckets)
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
@@ -400,6 +402,7 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 		kvBuffers[i] = make([]*keyVal, elements)
 	}
 	d := &DRUM{
+		filesPath:           path.Clean(filesPath),
 		dispatcher:          dispatcher,
 		buckets:             buckets,
 		elements:            elements,
