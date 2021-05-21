@@ -29,13 +29,13 @@ type DRUM struct {
 
 	size int64
 
-	auxBuffers          [][][]byte
+	auxBuffers [][][]byte
 
-	kvBuffers           [][]*element
+	kvBuffers [][]*element
 
-	fileNames           []names
+	fileNames []names
 
-	currentPointers     []pointers
+	currentPointers []pointers
 
 	nextBufferPosisions []int
 
@@ -72,7 +72,7 @@ func (d *DRUM) Sync() {
 }
 
 func (d *DRUM) getBucketOfKey(key uint64) int {
-	return int((key >> (64 - uint64(math.Exp(float64(d.buckets))))) + uint64(d.buckets) / 2)
+	return int((key >> (64 - uint64(math.Exp(float64(d.buckets))))) + uint64(d.buckets)/2)
 	// return int(key % uint64(d.buckets))
 }
 
@@ -150,7 +150,7 @@ func (d *DRUM) unsortMergeBuffer() {
 	if cap(d.unsortingHelper) >= len(d.sortedMergeBuffer) {
 		d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)]
 	} else {
-		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer) - len(d.unsortingHelper))...)
+		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer)-len(d.unsortingHelper))...)
 	}
 	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
@@ -233,7 +233,7 @@ func (d *DRUM) dispatch() {
 func (d *DRUM) assignFileNames() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
 		d.fileNames[bucket] = names{
-			Kv: d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.kv",
+			Kv:  d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.kv",
 			Aux: d.filesPath + "/" + strconv.Itoa(bucket) + "_bucket.aux",
 		}
 	}
@@ -285,7 +285,6 @@ func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
 	}
 	return bucket, position
 }
-
 
 func (d *DRUM) checkTimeToFeed() {
 	if d.feed {
