@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	pdb, err := pebble.Open("/tmp/abc1233", &pebble.Options{})
+	pdb, err := pebble.Open("/tmp/database", &pebble.Options{})
 	if err != nil {
 		panic(err)
 	}
