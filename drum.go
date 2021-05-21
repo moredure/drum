@@ -79,19 +79,25 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
 		element.Position = len(d.sortedMergeBuffer) - 1
 
-		kv.Read(d.buf[0:1])
+		if _, err := kv.Read(d.buf[0:1]); err != nil {
+			panic(err)
+		}
 		element.Op = d.buf[0]
-
-		kv.Read(d.buf[:])
+		
+		if _, err := kv.Read(d.buf[:]); err != nil {
+			panic(err)
+		}
 		element.Key = binary.BigEndian.Uint64(d.buf[:])
-
-		kv.Read(d.buf[:])
-
+		
+		if _, err := kv.Read(d.buf[:]); err != nil {
+			panic(err)
+		}
 		element.Value = make([]byte, binary.BigEndian.Uint64(d.buf[:]))
-		kv.Read(element.Value)
+
+		if _, err := kv.Read(element.Value); err != nil {
+			panic(err)
+		}
 	}
-
-
 }
 
 func (d *DRUM) sortMergeBuffer() {
