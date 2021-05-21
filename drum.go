@@ -3,6 +3,7 @@ package drum
 import (
 	"encoding/binary"
 	"io"
+	"math"
 	"os"
 	"path"
 	"sort"
@@ -63,7 +64,7 @@ func (d *DRUM) Sync() {
 }
 
 func (d *DRUM) getBucket(key uint64) int {
-	return int(key >> uint64(64 - math.Exp(float64(d.buckets))) + uint64(d.buckets / 2))
+	return int((key >> (64 - uint64(math.Exp(float64(d.buckets))))) + uint64(d.buckets) / 2)
 	// return int(key % uint64(d.buckets))
 }
 
