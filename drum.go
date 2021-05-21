@@ -260,9 +260,9 @@ func (d *DRUM) mergeBuckets() {
 
 func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
 	bucket = d.getBucket(key)
-	d.nextBufferPosisions[bucket] += 1
 	position = d.nextBufferPosisions[bucket]
-	if position == d.elements {
+	d.nextBufferPosisions[bucket] += 1
+	if d.nextBufferPosisions[bucket] == d.elements {
 		d.feed = true
 	}
 	return
