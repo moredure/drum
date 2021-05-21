@@ -22,7 +22,7 @@ type DRUM struct {
 
 	auxBuffers          [][][]byte
 
-	kvBuffers           [][]*keyVal
+	kvBuffers           [][]*element
 
 	fileNames           []names
 
@@ -30,7 +30,7 @@ type DRUM struct {
 
 	nextBufferPosisions []int
 
-	sortedMergeBuffer []*keyVal
+	sortedMergeBuffer []*element
 	unsortingHelper   []int
 	unsortedAuxBuffer [][]byte
 
@@ -87,26 +87,26 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 			break
 		}
 
-		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(keyVal))
-		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
-		element.Position = len(d.sortedMergeBuffer) - 1
+		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(element))
+		e := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
+		e.Position = len(d.sortedMergeBuffer) - 1
 
 		if _, err := kv.Read(d.buf[0:1]); err != nil {
 			panic(err)
 		}
-		element.Op = d.buf[0]
+		e.Op = d.buf[0]
 
 		if _, err := kv.Read(d.buf[:]); err != nil {
 			panic(err)
 		}
-		element.Key = binary.BigEndian.Uint64(d.buf[:])
+		e.Key = binary.BigEndian.Uint64(d.buf[:])
 
 		if _, err := kv.Read(d.buf[:]); err != nil {
 			panic(err)
 		}
-		element.Value = make([]byte, binary.BigEndian.Uint64(d.buf[:]))
+		e.Value = make([]byte, binary.BigEndian.Uint64(d.buf[:]))
 
-		if _, err := kv.Read(element.Value); err != nil {
+		if _, err := kv.Read(e.Value); err != nil {
 			panic(err)
 		}
 	}
@@ -119,19 +119,19 @@ func (d *DRUM) sortMergeBuffer() {
 }
 
 func (d *DRUM) synchronizeWithDisk() {
-	for _, element := range d.sortedMergeBuffer {
-		if Check == element.Op || CheckUpdate == element.Op {
-			if !d.db.Has(element.Key) {
-				element.Result = UniqueKey
+	for _, e := range d.sortedMergeBuffer {
+		if Check == e.Op || CheckUpdate == e.Op {
+			if !d.db.Has(e.Key) {
+				e.Result = UniqueKey
 			} else {
-				element.Result = DuplicateKey
-				if Check == element.Op {
-					element.Value = d.db.Get(element.Key)
+				e.Result = DuplicateKey
+				if Check == e.Op {
+					e.Value = d.db.Get(e.Key)
 				}
 			}
 		}
-		if Update == element.Op || CheckUpdate == element.Op {
-			d.db.Put(element.Key, element.Value)
+		if Update == e.Op || CheckUpdate == e.Op {
+			d.db.Put(e.Key, e.Value)
 		}
 	}
 	d.db.Sync()
@@ -234,7 +234,7 @@ func (d *DRUM) assignFileNames() {
 }
 
 func (d *DRUM) resetSynchronizationBuffers() {
-	d.sortedMergeBuffer = make([]*keyVal, 0, d.elements)
+	d.sortedMergeBuffer = make([]*element, 0, d.elements)
 	d.unsortingHelper = make([]int, 0, d.elements)
 	d.unsortedAuxBuffer = make([][]byte, 0, d.elements)
 }
@@ -273,7 +273,7 @@ func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
 
 func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
 	bucket, position := d.getBucketAndBufferPos(key)
-	d.kvBuffers[bucket][position] = &keyVal{
+	d.kvBuffers[bucket][position] = &element{
 		Key:   key,
 		Value: value,
 		Op:    op,
@@ -348,21 +348,21 @@ func (d *DRUM) feedBucket(bucket int) {
 	}
 
 	for i := 0; i < current; i += 1 {
-		element := d.kvBuffers[bucket][i]
+		e := d.kvBuffers[bucket][i]
 
-		d.buf[0] = element.Op
+		d.buf[0] = e.Op
 		if _, err := kv.Write(d.buf[0:1]); err != nil {
 			panic(err)
 		}
-		binary.BigEndian.PutUint64(d.buf[:], element.Key)
+		binary.BigEndian.PutUint64(d.buf[:], e.Key)
 		if _, err := kv.Write(d.buf[:]); err != nil {
 			panic(err)
 		}
-		binary.BigEndian.PutUint64(d.buf[:], uint64(len(element.Value)))
+		binary.BigEndian.PutUint64(d.buf[:], uint64(len(e.Value)))
 		if _, err := kv.Write(d.buf[:]); err != nil {
 			panic(err)
 		}
-		if _, err := kv.Write(element.Value); err != nil {
+		if _, err := kv.Write(e.Value); err != nil {
 			panic(err)
 		}
 
@@ -401,9 +401,9 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 	for i := range auxBuffers {
 		auxBuffers[i] = make([][]byte, elements)
 	}
-	kvBuffers := make([][]*keyVal, buckets)
+	kvBuffers := make([][]*element, buckets)
 	for i := range kvBuffers {
-		kvBuffers[i] = make([]*keyVal, elements)
+		kvBuffers[i] = make([]*element, elements)
 	}
 	d := &DRUM{
 		filesPath:           path.Clean(filesPath),
