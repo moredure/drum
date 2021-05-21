@@ -70,7 +70,7 @@ func (d *DRUM) getBucketOfKey(key uint64) int {
 }
 
 func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
-	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_RDWR, 0)
+	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -151,7 +151,7 @@ func (d *DRUM) unsortMergeBuffer() {
 }
 
 func (d *DRUM) readAuxBucketForDispatching(bucket int) {
-	aux, err := os.OpenFile(d.fileNames[bucket].Aux, os.O_RDWR, 0)
+	aux, err := os.OpenFile(d.fileNames[bucket].Aux, os.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -305,7 +305,7 @@ func (d *DRUM) feedBucket(bucket int) {
 		return
 	}
 
-	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_RDWR, 0)
+	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_WRONLY, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -315,7 +315,7 @@ func (d *DRUM) feedBucket(bucket int) {
 		}
 	}()
 
-	aux, err := os.OpenFile(d.fileNames[bucket].Aux, os.O_RDWR, 0)
+	aux, err := os.OpenFile(d.fileNames[bucket].Aux, os.O_WRONLY, 0)
 	if err != nil {
 		panic(err)
 	}
