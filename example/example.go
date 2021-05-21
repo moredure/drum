@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/cockroachdb/pebble"
 	"github.com/moredure/drum"
+	"strconv"
 )
 
 func main() {
@@ -20,7 +21,9 @@ func main() {
 	dispatcher := make(chan interface{}, 16)
 	dr := drum.NewDrum(2, 8, 1024, db, dispatcher, "/tmp/buckets")
 	go func() {
-		dr.CheckAndUpdate(1, nil, nil)
+		for i := 0; i < 16; i += 1 {
+			dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
+		}
 		dr.Sync()
 	}()
 	for message := range dispatcher {
