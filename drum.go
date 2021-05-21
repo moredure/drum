@@ -13,6 +13,8 @@ import (
 type DRUM struct {
 	bucketsPath string
 
+	shift uint64
+
 	dispatcher Dispatcher
 
 	merge, feed bool
@@ -64,7 +66,7 @@ func (d *DRUM) Sync() {
 }
 
 func (d *DRUM) getBucketOfKey(key uint64) int {
-	return int(key >> (64 - math.Ilogb(float64(d.buckets))))
+	return int(key >> d.shift)
 }
 
 func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
@@ -394,6 +396,7 @@ func Open(bucketsPath string, buckets int, elements int, size int64, db DB, disp
 		bucketsPath:         path.Clean(bucketsPath),
 		dispatcher:          dispatcher,
 		buckets:             buckets,
+		shift:               uint64(64 - math.Ilogb(float64(buckets))),
 		elements:            elements,
 		size:                size,
 		db:                  db,
