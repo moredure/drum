@@ -391,7 +391,7 @@ func (d *DRUM) checkTimeToMerge() {
 	}
 }
 
-func Open(bucketsPath string, buckets int, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
+func Open(bucketsPath string, buckets, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
 	d := &DRUM{
 		bucketsPath:         path.Clean(bucketsPath),
 		dispatcher:          dispatcher,
