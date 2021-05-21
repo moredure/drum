@@ -74,7 +74,15 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		}
 	}()
 
-	for pos, _ := kv.Seek(0, io.SeekCurrent); pos < d.currentPointers[bucket].Kv; pos, _ = kv.Seek(0, io.SeekCurrent) {
+	for {
+		pos, err := kv.Seek(0, io.SeekCurrent)
+		if err != nil {
+			panic(err)
+		}
+		if pos < d.currentPointers[bucket].Kv {
+			break
+		}
+		
 		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(keyVal))
 		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
 		element.Position = len(d.sortedMergeBuffer) - 1
@@ -83,12 +91,12 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 			panic(err)
 		}
 		element.Op = d.buf[0]
-		
+
 		if _, err := kv.Read(d.buf[:]); err != nil {
 			panic(err)
 		}
 		element.Key = binary.BigEndian.Uint64(d.buf[:])
-		
+
 		if _, err := kv.Read(d.buf[:]); err != nil {
 			panic(err)
 		}
