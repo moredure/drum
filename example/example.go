@@ -43,7 +43,7 @@ func main() {
 	}
 	dr := drum.NewDrum(8, 32 * 1024, 1024 * 1024, db, new(dispatcher), "/tmp/buckets")
 
-	for i := 0; i < 100000; i += 1 {
+	for i := 0; i < 1000000; i += 1 {
 		dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 	}
 }
@@ -62,7 +62,9 @@ func (d *db) Has(u uint64) bool {
 	if err != nil {
 		panic(err)
 	}
-	closer.Close()
+	if err := closer.Close(); err != nil {
+		panic(err)
+	}
 	return true
 }
 
@@ -89,5 +91,7 @@ func (d *db) Get(u uint64) []byte {
 }
 
 func (d *db) Sync() {
-	d.db.Flush()
+	if err := d.db.Flush(); err != nil {
+		panic(err)
+	}
 }
