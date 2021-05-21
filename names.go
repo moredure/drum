@@ -1,5 +1,5 @@
 package drum
 
-type pair struct {
+type names struct {
 	Kv, Aux string
 }
