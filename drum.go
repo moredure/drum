@@ -21,9 +21,9 @@ type DRUM struct {
 
 	kvBuffers           [][]*keyVal
 
-	fileNames           []pair
+	fileNames           []names
 
-	currentPointers     [][2]int64
+	currentPointers     []pointers
 
 	nextBufferPosisions []int
 
@@ -74,9 +74,7 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		}
 	}()
 
-	written := d.currentPointers[bucket][0]
-
-	for pos, _ := kv.Seek(0, io.SeekCurrent); pos < written; pos, _ = kv.Seek(0, io.SeekCurrent) {
+	for pos, _ := kv.Seek(0, io.SeekCurrent); pos < d.currentPointers[bucket].Kv; pos, _ = kv.Seek(0, io.SeekCurrent) {
 		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(keyVal))
 		element := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
 		element.Position = len(d.sortedMergeBuffer) - 1
@@ -144,14 +142,13 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 	}()
 
 
-	auxWritten := d.currentPointers[bucket][1]
 
 	for {
 		pos, err := aux.Seek(0, io.SeekCurrent)
 		if err != nil {
 			panic(err)
 		}
-		if pos < auxWritten {
+		if pos < d.currentPointers[bucket].Aux {
 			break
 		}
 		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil)
@@ -210,7 +207,7 @@ func (d *DRUM) dispatch() {
 
 func (d *DRUM) assignFileNames() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
-		d.fileNames[bucket] = pair{
+		d.fileNames[bucket] = names{
 			Kv: strconv.Itoa(bucket) + "_bucket.kv",
 			Aux: strconv.Itoa(bucket) + "_bucket.aux",
 		}
@@ -225,7 +222,7 @@ func (d *DRUM) resetSynchronizationBuffers() {
 
 func (d *DRUM) resetFilePointers() {
 	for bucket := 0; bucket < d.buckets; bucket += 1 {
-		d.currentPointers[bucket] = [2]int64{0, 0}
+		d.currentPointers[bucket] = pointers{}
 	}
 }
 
@@ -321,8 +318,14 @@ func (d *DRUM) feedBucket(bucket int) {
 	if err != nil {
 		panic(err)
 	}
-	d.currentPointers[bucket][0], _ = kv.Seek(0, io.SeekCurrent)
-	d.currentPointers[bucket][1], _ = aux.Seek(0, io.SeekCurrent)
+	d.currentPointers[bucket].Kv, err = kv.Seek(0, io.SeekCurrent)
+	if err != nil {
+		panic(err)
+	}
+	d.currentPointers[bucket].Aux, err = aux.Seek(0, io.SeekCurrent)
+	if err != nil {
+		panic(err)
+	}
 
 	for i := 0; i < current; i += 1 {
 		element := d.kvBuffers[bucket][i]
@@ -353,16 +356,16 @@ func (d *DRUM) feedBucket(bucket int) {
 		}
 	}
 
-	d.currentPointers[bucket][0], err = kv.Seek(0, io.SeekCurrent)
+	d.currentPointers[bucket].Kv, err = kv.Seek(0, io.SeekCurrent)
 	if err != nil {
 		panic(err)
 	}
-	d.currentPointers[bucket][1], err = aux.Seek(0, io.SeekCurrent)
+	d.currentPointers[bucket].Aux, err = aux.Seek(0, io.SeekCurrent)
 	if err != nil {
 		panic(err)
 	}
 
-	if d.currentPointers[bucket][0]-kvBegin > d.size || d.currentPointers[bucket][1]-auxBegin > d.size {
+	if d.currentPointers[bucket].Kv-kvBegin > d.size || d.currentPointers[bucket].Aux-auxBegin > d.size {
 		d.merge = true
 	}
 }
@@ -390,8 +393,8 @@ func NewDrum(buckets int, elements int, size int64, db DB, dispatcher chan inter
 		db:                  db,
 		auxBuffers:          auxBuffers,
 		kvBuffers:           kvBuffers,
-		fileNames:           make([]pair, buckets),
-		currentPointers:     make([][2]int64, buckets),
+		fileNames:           make([]names, buckets),
+		currentPointers:     make([]pointers, buckets),
 		nextBufferPosisions: make([]int, buckets),
 	}
 	d.resetSynchronizationBuffers()
