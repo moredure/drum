@@ -9,6 +9,29 @@ import (
 	"strconv"
 )
 
+type dispatcher struct {
+}
+
+func (d dispatcher) UniqueKeyCheckEvent(event *drum.Event) {
+	fmt.Println(event.Key)
+}
+
+func (d dispatcher) DuplicateKeyCheckEvent(event *drum.Event) {
+	fmt.Println(event.Key)
+}
+
+func (d dispatcher) UniqueKeyUpdateEvent(event *drum.Event) {
+	fmt.Println(event.Key)
+}
+
+func (d dispatcher) DuplicateKeyUpdateEvent(event *drum.Event) {
+	fmt.Println(event.Key)
+}
+
+func (d dispatcher) UpdateEvent(event *drum.Event) {
+	fmt.Println(event.Key)
+}
+
 func main() {
 	pdb, err := pebble.Open("/tmp/database", nil)
 	if err != nil {
@@ -18,28 +41,10 @@ func main() {
 	db := &db{
 		db: pdb,
 	}
-	dispatcher := make(chan interface{}, 100)
-	dr := drum.NewDrum(2, 8, 1024, db, dispatcher, "/tmp/buckets")
-	go func() {
-		for i := 0; i < 120; i += 1 {
-			dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
-		}
-	}()
-	for message := range dispatcher {
-		switch m := message.(type) {
-		case *drum.DuplicateKeyCheckEvent:
-			fmt.Println("DuplicateKeyCheckEvent", m)
-		case *drum.DuplicateKeyUpdateEvent:
-			fmt.Println("DuplicateKeyUpdateEvent", m)
-		case *drum.UniqueKeyCheckEvent:
-			fmt.Println("UniqueKeyCheckEvent", m)
-		case *drum.UniqueKeyUpdateEvent:
-			fmt.Println("UniqueKeyUpdateEvent", m)
-		case *drum.UpdateEvent:
-			fmt.Println("UpdateEvent", m)
-		default:
-			panic("not implemented")
-		}
+	dr := drum.NewDrum(8, 32 * 1024, 1024 * 1024, db, new(dispatcher), "/tmp/buckets")
+
+	for i := 0; i < 100000; i += 1 {
+		dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 	}
 }
 
