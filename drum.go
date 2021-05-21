@@ -63,7 +63,8 @@ func (d *DRUM) Sync() {
 }
 
 func (d *DRUM) getBucket(key uint64) int {
-	return int(key % uint64(d.buckets))
+	return int(key >> uint64(64 - math.Exp(float64(d.buckets))) + uint64(d.buckets / 2))
+	// return int(key % uint64(d.buckets))
 }
 
 func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
