@@ -404,11 +404,9 @@ func Open(bucketsPath string, buckets, elements int, size int64, db DB, dispatch
 		currentPointers:     make([]pointers, buckets),
 		nextBufferPosisions: make([]int, buckets),
 	}
-	d.auxBuffers = make([][][]byte, buckets)
-	d.kvBuffers = make([][]*element, buckets)
+	d.auxBuffers, d.kvBuffers = make([][][]byte, buckets), make([][]*element, buckets)
 	for i := 0; i < buckets; i += 1 {
-		d.auxBuffers[i] = make([][]byte, elements)
-		d.kvBuffers[i] = make([]*element, elements)
+		d.auxBuffers[i], d.kvBuffers[i] = make([][]byte, elements), make([]*element, elements)
 	}
 	d.resetSynchronizationBuffers()
 	d.assignFileNames()
