@@ -21,22 +21,22 @@ func main() {
 	dispatcher := make(chan interface{}, 100)
 	dr := drum.NewDrum(2, 8, 1024, db, dispatcher, "/tmp/buckets")
 	go func() {
-		for i := 0; i < 100; i += 1 {
+		for i := 0; i < 120; i += 1 {
 			dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 		}
 	}()
 	for message := range dispatcher {
-		switch message.(type) {
+		switch m := message.(type) {
 		case *drum.DuplicateKeyCheckEvent:
-			fmt.Println("DuplicateKeyCheckEvent")
+			fmt.Println("DuplicateKeyCheckEvent", m)
 		case *drum.DuplicateKeyUpdateEvent:
-			fmt.Println("DuplicateKeyUpdateEvent")
+			fmt.Println("DuplicateKeyUpdateEvent", m)
 		case *drum.UniqueKeyCheckEvent:
-			fmt.Println("UniqueKeyCheckEvent")
+			fmt.Println("UniqueKeyCheckEvent", m)
 		case *drum.UniqueKeyUpdateEvent:
-			fmt.Println("UniqueKeyUpdateEvent")
+			fmt.Println("UniqueKeyUpdateEvent", m)
 		case *drum.UpdateEvent:
-			fmt.Println("UpdateEvent")
+			fmt.Println("UpdateEvent", m)
 		default:
 			panic("not implemented")
 		}
