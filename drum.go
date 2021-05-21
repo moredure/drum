@@ -63,7 +63,7 @@ func (d *DRUM) Sync() {
 	d.mergeBuckets()
 }
 
-func (d *DRUM) getBucket(key uint64) int {
+func (d *DRUM) getBucketOfKey(key uint64) int {
 	return int((key >> (64 - uint64(math.Exp(float64(d.buckets))))) + uint64(d.buckets) / 2)
 	// return int(key % uint64(d.buckets))
 }
@@ -260,7 +260,7 @@ func (d *DRUM) mergeBuckets() {
 }
 
 func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
-	bucket = d.getBucket(key)
+	bucket = d.getBucketOfKey(key)
 	position = d.nextBufferPosisions[bucket]
 	d.nextBufferPosisions[bucket] += 1
 	if d.nextBufferPosisions[bucket] == d.elements {
