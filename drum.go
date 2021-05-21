@@ -64,8 +64,7 @@ func (d *DRUM) Sync() {
 }
 
 func (d *DRUM) getBucketOfKey(key uint64) int {
-	return int((key >> (64 - uint64(math.Exp(float64(d.buckets))))) + uint64(d.buckets)/2)
-	// return int(key % uint64(d.buckets))
+	return int(key >> (64 - math.Ilogb(float64(d.buckets))))
 }
 
 func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
@@ -144,7 +143,7 @@ func (d *DRUM) unsortMergeBuffer() {
 	} else {
 		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer)-len(d.unsortingHelper))...)
 	}
-	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
+	for i := range d.sortedMergeBuffer {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
 }
@@ -181,8 +180,7 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 }
 
 func (d *DRUM) dispatch() {
-	for i := 0; i < len(d.unsortingHelper); i += 1 {
-		idx := d.unsortingHelper[i]
+	for i, idx := range d.unsortingHelper {
 		e := d.sortedMergeBuffer[idx]
 		aux := d.unsortedAuxBuffer[i]
 
@@ -223,7 +221,7 @@ func (d *DRUM) dispatch() {
 }
 
 func (d *DRUM) assignFileNames() {
-	for bucket := 0; bucket < d.buckets; bucket += 1 {
+	for bucket := range d.fileNames {
 		d.fileNames[bucket] = names{
 			Kv:  d.bucketsPath + "/" + strconv.Itoa(bucket) + "_bucket.kv",
 			Aux: d.bucketsPath + "/" + strconv.Itoa(bucket) + "_bucket.aux",
@@ -238,7 +236,7 @@ func (d *DRUM) resetSynchronizationBuffers() {
 }
 
 func (d *DRUM) resetFilePointers() {
-	for bucket := 0; bucket < d.buckets; bucket += 1 {
+	for bucket := range d.currentPointers {
 		d.currentPointers[bucket] = pointers{}
 	}
 }
@@ -342,8 +340,8 @@ func (d *DRUM) feedBucket(bucket int) {
 		panic(err)
 	}
 
-	for i := 0; i < current; i += 1 {
-		e := d.kvBuffers[bucket][i]
+	for position := 0; position < current; position += 1 {
+		e := d.kvBuffers[bucket][position]
 
 		d.buf[0] = e.Op
 		if _, err := kv.Write(d.buf[0:1]); err != nil {
@@ -361,7 +359,7 @@ func (d *DRUM) feedBucket(bucket int) {
 			panic(err)
 		}
 
-		a := d.auxBuffers[bucket][i]
+		a := d.auxBuffers[bucket][position]
 		binary.BigEndian.PutUint32(d.buf[:4], uint32(len(a)))
 		if _, err := aux.Write(d.buf[:4]); err != nil {
 			panic(err)
@@ -392,14 +390,6 @@ func (d *DRUM) checkTimeToMerge() {
 }
 
 func Open(bucketsPath string, buckets int, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
-	auxBuffers := make([][][]byte, buckets)
-	for i := range auxBuffers {
-		auxBuffers[i] = make([][]byte, elements)
-	}
-	kvBuffers := make([][]*element, buckets)
-	for i := range kvBuffers {
-		kvBuffers[i] = make([]*element, elements)
-	}
 	d := &DRUM{
 		bucketsPath:         path.Clean(bucketsPath),
 		dispatcher:          dispatcher,
@@ -407,11 +397,15 @@ func Open(bucketsPath string, buckets int, elements int, size int64, db DB, disp
 		elements:            elements,
 		size:                size,
 		db:                  db,
-		auxBuffers:          auxBuffers,
-		kvBuffers:           kvBuffers,
 		fileNames:           make([]names, buckets),
 		currentPointers:     make([]pointers, buckets),
 		nextBufferPosisions: make([]int, buckets),
+	}
+	d.auxBuffers = make([][][]byte, buckets)
+	d.kvBuffers = make([][]*element, buckets)
+	for i := 0; i < buckets; i += 1 {
+		d.auxBuffers[i] = make([][]byte, elements)
+		d.kvBuffers[i] = make([]*element, elements)
 	}
 	d.resetSynchronizationBuffers()
 	d.assignFileNames()
