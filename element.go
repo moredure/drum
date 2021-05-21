@@ -1,6 +1,6 @@
 package drum
 
-type keyVal struct {
+type element struct {
 	Key      uint64
 	Value    []byte
 	Op       byte
