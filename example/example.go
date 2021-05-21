@@ -18,11 +18,11 @@ func main() {
 	db := &db{
 		db: pdb,
 	}
-	dispatcher := make(chan interface{}, 16)
+	dispatcher := make(chan interface{}, 100)
 	dr := drum.NewDrum(2, 8, 1024, db, dispatcher, "/tmp/buckets")
 	go func() {
-		for i := 0; i < 16; i += 1 {
-			dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
+		for i := 0; i < 100; i += 1 {
+			dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 		}
 	}()
 	for message := range dispatcher {
