@@ -10,14 +10,6 @@ import (
 	"strconv"
 )
 
-type Dispatcher interface {
-	UniqueKeyCheckEvent(*Event)
-	DuplicateKeyCheckEvent(*Event)
-	UniqueKeyUpdateEvent(*Event)
-	DuplicateKeyUpdateEvent(*Event)
-	UpdateEvent(*Event)
-}
-
 type DRUM struct {
 	filesPath string
 
