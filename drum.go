@@ -10,6 +10,14 @@ import (
 	"strconv"
 )
 
+type Dispatcher interface {
+	UniqueKeyCheckEvent(*Event)
+	DuplicateKeyCheckEvent(*Event)
+	UniqueKeyUpdateEvent(*Event)
+	DuplicateKeyUpdateEvent(*Event)
+	UpdateEvent(*Event)
+}
+
 type DRUM struct {
 	filesPath string
 
@@ -102,10 +110,10 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		}
 		e.Key = binary.BigEndian.Uint64(d.buf[:])
 
-		if _, err := kv.Read(d.buf[:]); err != nil {
+		if _, err := kv.Read(d.buf[:4]); err != nil {
 			panic(err)
 		}
-		e.Value = make([]byte, binary.BigEndian.Uint64(d.buf[:]))
+		e.Value = make([]byte, binary.BigEndian.Uint32(d.buf[:4]))
 
 		if _, err := kv.Read(e.Value); err != nil {
 			panic(err)
@@ -169,11 +177,10 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 			break
 		}
 		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil)
-		if _, err := aux.Read(d.buf[:]); err != nil {
+		if _, err := aux.Read(d.buf[:4]); err != nil {
 			panic(err)
 		}
-		size := binary.BigEndian.Uint64(d.buf[:])
-		a := make([]byte, size)
+		a := make([]byte, binary.BigEndian.Uint32(d.buf[:4]))
 		if _, err := aux.Read(a); err != nil {
 			panic(err)
 		}
@@ -355,8 +362,8 @@ func (d *DRUM) feedBucket(bucket int) {
 		if _, err := kv.Write(d.buf[:]); err != nil {
 			panic(err)
 		}
-		binary.BigEndian.PutUint64(d.buf[:], uint64(len(e.Value)))
-		if _, err := kv.Write(d.buf[:]); err != nil {
+		binary.BigEndian.PutUint32(d.buf[:4], uint32(len(e.Value)))
+		if _, err := kv.Write(d.buf[:4]); err != nil {
 			panic(err)
 		}
 		if _, err := kv.Write(e.Value); err != nil {
@@ -364,8 +371,8 @@ func (d *DRUM) feedBucket(bucket int) {
 		}
 
 		a := d.auxBuffers[bucket][i]
-		binary.BigEndian.PutUint64(d.buf[:], uint64(len(a)))
-		if _, err := aux.Write(d.buf[:]); err != nil {
+		binary.BigEndian.PutUint32(d.buf[:4], uint32(len(a)))
+		if _, err := aux.Write(d.buf[:4]); err != nil {
 			panic(err)
 		}
 		if _, err := aux.Write(a); err != nil {
