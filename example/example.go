@@ -44,7 +44,7 @@ func main() {
 	dr := drum.NewDrum(8, 32 * 1024, 1024 * 1024, db, new(dispatcher), "/tmp/buckets")
 
 	for i := 0; i < 1000000; i += 1 {
-		dr.CheckAndUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
+		dr.CheckUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 	}
 }
 
