@@ -41,7 +41,6 @@ type DRUM struct {
 
 func (d *DRUM) Check(key uint64, aux []byte) {
 	bucket, position := d.add(key, nil, Check)
-	println(bucket, position)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
@@ -143,7 +142,6 @@ func (d *DRUM) unsortMergeBuffer() {
 	} else {
 		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer) - len(d.unsortingHelper))...)
 	}
-	println(cap(d.unsortingHelper), len(d.unsortingHelper), cap(d.sortedMergeBuffer), len(d.sortedMergeBuffer))
 	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
@@ -182,7 +180,6 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 }
 
 func (d *DRUM) dispatch() {
-	println("dispatch", len(d.unsortingHelper))
 	for i := 0; i < len(d.unsortingHelper); i += 1 {
 		idx := d.unsortingHelper[i]
 		e := d.sortedMergeBuffer[idx]
@@ -265,7 +262,6 @@ func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
 	position = d.nextBufferPosisions[bucket]
 	d.nextBufferPosisions[bucket] += 1
 	if d.nextBufferPosisions[bucket] == d.elements {
-		println("feed")
 		d.feed = true
 	}
 	return
@@ -284,7 +280,6 @@ func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
 
 func (d *DRUM) checkTimeToFeed() {
 	if d.feed {
-		println("feedBuckets")
 		d.feedBuckets()
 	}
 	d.checkTimeToMerge()
