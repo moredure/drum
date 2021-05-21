@@ -41,6 +41,7 @@ type DRUM struct {
 
 func (d *DRUM) Check(key uint64, aux []byte) {
 	bucket, position := d.add(key, nil, Check)
+	println(bucket, position)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
@@ -82,7 +83,7 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		if err != nil {
 			panic(err)
 		}
-		if pos < d.currentPointers[bucket].Kv {
+		if pos >= d.currentPointers[bucket].Kv {
 			break
 		}
 
@@ -142,6 +143,7 @@ func (d *DRUM) unsortMergeBuffer() {
 	} else {
 		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer) - len(d.unsortingHelper))...)
 	}
+	println(cap(d.unsortingHelper), len(d.unsortingHelper), cap(d.sortedMergeBuffer), len(d.sortedMergeBuffer))
 	for i := 0; i < len(d.sortedMergeBuffer); i += 1 {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
 	}
@@ -158,29 +160,29 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 		}
 	}()
 
-
-
 	for {
 		pos, err := aux.Seek(0, io.SeekCurrent)
 		if err != nil {
 			panic(err)
 		}
-		if pos < d.currentPointers[bucket].Aux {
+		if pos >= d.currentPointers[bucket].Aux {
 			break
 		}
 		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil)
 		if _, err := aux.Read(d.buf[:]); err != nil {
 			panic(err)
 		}
-		serial := make([]byte, binary.BigEndian.Uint64(d.buf[:]))
-		if _, err := aux.Read(serial); err != nil {
+		size := binary.BigEndian.Uint64(d.buf[:])
+		a := make([]byte, size)
+		if _, err := aux.Read(a); err != nil {
 			panic(err)
 		}
-		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = serial
+		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = a
 	}
 }
 
 func (d *DRUM) dispatch() {
+	println("dispatch", len(d.unsortingHelper))
 	for i := 0; i < len(d.unsortingHelper); i += 1 {
 		idx := d.unsortingHelper[i]
 		e := d.sortedMergeBuffer[idx]
@@ -263,6 +265,7 @@ func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
 	position = d.nextBufferPosisions[bucket]
 	d.nextBufferPosisions[bucket] += 1
 	if d.nextBufferPosisions[bucket] == d.elements {
+		println("feed")
 		d.feed = true
 	}
 	return
@@ -281,6 +284,7 @@ func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
 
 func (d *DRUM) checkTimeToFeed() {
 	if d.feed {
+		println("feedBuckets")
 		d.feedBuckets()
 	}
 	d.checkTimeToMerge()
@@ -334,11 +338,11 @@ func (d *DRUM) feedBucket(bucket int) {
 	if err != nil {
 		panic(err)
 	}
-	d.currentPointers[bucket].Kv, err = kv.Seek(0, io.SeekCurrent)
+	_, err = kv.Seek(d.currentPointers[bucket].Kv, io.SeekCurrent)
 	if err != nil {
 		panic(err)
 	}
-	d.currentPointers[bucket].Aux, err = aux.Seek(0, io.SeekCurrent)
+	_, err = aux.Seek(d.currentPointers[bucket].Aux, io.SeekCurrent)
 	if err != nil {
 		panic(err)
 	}
@@ -364,7 +368,7 @@ func (d *DRUM) feedBucket(bucket int) {
 
 		a := d.auxBuffers[bucket][i]
 		binary.BigEndian.PutUint64(d.buf[:], uint64(len(a)))
-		if _, err := kv.Write(d.buf[:]); err != nil {
+		if _, err := aux.Write(d.buf[:]); err != nil {
 			panic(err)
 		}
 		if _, err := aux.Write(a); err != nil {
