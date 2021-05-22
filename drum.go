@@ -390,8 +390,8 @@ func (d *DRUM) checkTimeToMerge() {
 }
 
 func Open(bucketsPath string, buckets, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
-	if exponent := math.Logb(float64(buckets)); math.Pow(exponent, 2) != float64(buckets) {
-		panic("buckets show be a pow of 2")
+	if math.Pow(math.Logb(float64(buckets)), 2) != float64(buckets) {
+		panic("buckets count should be a pow of 2")
 	}
 	d := &DRUM{
 		bucketsPath:         path.Clean(bucketsPath),
