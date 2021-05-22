@@ -43,27 +43,27 @@ type DRUM struct {
 }
 
 const (
-	Check byte = iota
-	Update
-	CheckUpdate
-	UniqueKey
-	DuplicateKey
+	check byte = iota
+	update
+	checkUpdate
+	uniqueKey
+	duplicateKey
 )
 
 func (d *DRUM) Check(key uint64, aux []byte) {
-	bucket, position := d.add(key, nil, Check)
+	bucket, position := d.add(key, nil, check)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
 
 func (d *DRUM) Update(key uint64, value, aux []byte) {
-	bucket, position := d.add(key, value, Update)
+	bucket, position := d.add(key, value, update)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
 
 func (d *DRUM) CheckUpdate(key uint64, value, aux []byte) {
-	bucket, position := d.add(key, value, CheckUpdate)
+	bucket, position := d.add(key, value, checkUpdate)
 	d.auxBuffers[bucket][position] = aux
 	d.checkTimeToFeed()
 }
@@ -130,17 +130,17 @@ func (d *DRUM) sortMergeBuffer() {
 
 func (d *DRUM) synchronizeWithDisk() {
 	for _, e := range d.sortedMergeBuffer {
-		if Check == e.Op || CheckUpdate == e.Op {
+		if check == e.Op || checkUpdate == e.Op {
 			if !d.db.Has(e.Key) {
-				e.Result = UniqueKey
+				e.Result = uniqueKey
 			} else {
-				e.Result = DuplicateKey
-				if Check == e.Op {
+				e.Result = duplicateKey
+				if check == e.Op {
 					e.Value = d.db.Get(e.Key)
 				}
 			}
 		}
-		if Update == e.Op || CheckUpdate == e.Op {
+		if update == e.Op || checkUpdate == e.Op {
 			d.db.Put(e.Key, e.Value)
 		}
 	}
@@ -193,30 +193,30 @@ func (d *DRUM) dispatch() {
 		e := d.sortedMergeBuffer[idx]
 		aux := d.unsortedAuxBuffer[i]
 
-		if Check == e.Op && UniqueKey == e.Result {
+		if check == e.Op && uniqueKey == e.Result {
 			d.dispatcher.UniqueKeyCheckEvent(&UniqueKeyCheckEvent{
 				Key: e.Key,
 				Aux: aux,
 			})
-		} else if Check == e.Op && DuplicateKey == e.Result {
+		} else if check == e.Op && duplicateKey == e.Result {
 			d.dispatcher.DuplicateKeyCheckEvent(&DuplicateKeyCheckEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			})
-		} else if CheckUpdate == e.Op && UniqueKey == e.Result {
+		} else if checkUpdate == e.Op && uniqueKey == e.Result {
 			d.dispatcher.UniqueKeyUpdateEvent(&UniqueKeyUpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			})
-		} else if CheckUpdate == e.Op && DuplicateKey == e.Result {
+		} else if checkUpdate == e.Op && duplicateKey == e.Result {
 			d.dispatcher.DuplicateKeyUpdateEvent(&DuplicateKeyUpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
 				Aux:   aux,
 			})
-		} else if Update == e.Op {
+		} else if update == e.Op {
 			d.dispatcher.UpdateEvent(&UpdateEvent{
 				Key:   e.Key,
 				Value: e.Value,
