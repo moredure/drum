@@ -42,6 +42,14 @@ type DRUM struct {
 	db DB
 }
 
+const (
+	Check byte = iota
+	Update
+	CheckUpdate
+	UniqueKey
+	DuplicateKey
+)
+
 func (d *DRUM) Check(key uint64, aux []byte) {
 	bucket, position := d.add(key, nil, Check)
 	d.auxBuffers[bucket][position] = aux
