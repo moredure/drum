@@ -232,7 +232,7 @@ func (d *DRUM) assignFileNames() {
 
 func (d *DRUM) resetSynchronizationBuffers() {
 	d.sortedMergeBuffer = make([]*element, 0, d.elements)
-	d.unsortingHelper = make([]int, 0, d.elements)
+	d.unsortingHelper = d.unsortingHelper[:0]
 	d.unsortedAuxBuffer = make([][]byte, 0, d.elements)
 }
 
