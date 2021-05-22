@@ -14,7 +14,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer pdb.Close()
+	defer func() {
+		if err := pdb.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	db := &db{
 		db: pdb,
 	}
