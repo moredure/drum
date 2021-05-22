@@ -1,4 +1,7 @@
 # DRUM
+
+[![GoDoc](https://godoc.org/github.com/moredure/drum?status.png)](https://godoc.org/github.com/moredure/drum)
+
 Golang implementation of the disk repository with update management (DRUM) framework as presented by Hsin-Tsang Lee, Derek Leonard, Xiaoming Wang, and Dmitri Loguinov in the paper "IRLbot: Scaling to 6 Billion Pages and Beyond".
 
 Credits
