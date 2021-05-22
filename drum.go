@@ -81,11 +81,11 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 	}()
 
 	for {
-		pos, err := kv.Seek(0, io.SeekCurrent)
+		position, err := kv.Seek(0, io.SeekCurrent)
 		if err != nil {
 			panic(err)
 		}
-		if pos >= d.currentPointers[bucket].Kv {
+		if position >= d.currentPointers[bucket].Kv {
 			break
 		}
 
@@ -258,7 +258,7 @@ func (d *DRUM) mergeBuckets() {
 	d.merge = false
 }
 
-func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
+func (d *DRUM) getBucketAndBufferPosition(key uint64) (bucket, position int) {
 	bucket = d.getBucketOfKey(key)
 	position = d.nextBufferPosisions[bucket]
 	d.nextBufferPosisions[bucket] += 1
@@ -269,7 +269,7 @@ func (d *DRUM) getBucketAndBufferPos(key uint64) (bucket, position int) {
 }
 
 func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
-	bucket, position := d.getBucketAndBufferPos(key)
+	bucket, position := d.getBucketAndBufferPosition(key)
 	d.kvBuffers[bucket][position] = &element{
 		Key:   key,
 		Value: value,
