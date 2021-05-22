@@ -88,10 +88,10 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		if position >= d.currentPointers[bucket].Kv {
 			break
 		}
-
-		d.sortedMergeBuffer = append(d.sortedMergeBuffer, new(element))
-		e := d.sortedMergeBuffer[len(d.sortedMergeBuffer)-1]
-		e.Position = len(d.sortedMergeBuffer) - 1
+		e := &element{
+			Position: len(d.sortedMergeBuffer),
+		}
+		d.sortedMergeBuffer = append(d.sortedMergeBuffer, e)
 
 		if _, err := kv.Read(d.buf[0:1]); err != nil {
 			panic(err)
@@ -162,14 +162,13 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 	}()
 
 	for {
-		pos, err := aux.Seek(0, io.SeekCurrent)
+		position, err := aux.Seek(0, io.SeekCurrent)
 		if err != nil {
 			panic(err)
 		}
-		if pos >= d.currentPointers[bucket].Aux {
+		if position >= d.currentPointers[bucket].Aux {
 			break
 		}
-		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, nil)
 		if _, err := aux.Read(d.buf[:4]); err != nil {
 			panic(err)
 		}
@@ -177,7 +176,7 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 		if _, err := aux.Read(a); err != nil {
 			panic(err)
 		}
-		d.unsortedAuxBuffer[len(d.unsortedAuxBuffer)-1] = a
+		d.unsortedAuxBuffer = append(d.unsortedAuxBuffer, a)
 	}
 }
 
@@ -333,12 +332,11 @@ func (d *DRUM) feedBucket(bucket int) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = kv.Seek(d.currentPointers[bucket].Kv, io.SeekCurrent)
-	if err != nil {
+	
+	if _, err := kv.Seek(d.currentPointers[bucket].Kv, io.SeekCurrent); err != nil {
 		panic(err)
 	}
-	_, err = aux.Seek(d.currentPointers[bucket].Aux, io.SeekCurrent)
-	if err != nil {
+	if _, err := aux.Seek(d.currentPointers[bucket].Aux, io.SeekCurrent); err != nil {
 		panic(err)
 	}
 
@@ -392,6 +390,9 @@ func (d *DRUM) checkTimeToMerge() {
 }
 
 func Open(bucketsPath string, buckets, elements int, size int64, db DB, dispatcher Dispatcher) *DRUM {
+	if exponent := math.Logb(float64(buckets)); math.Pow(exponent, 2) != float64(buckets) {
+		panic("buckets show be a pow of 2")
+	}
 	d := &DRUM{
 		bucketsPath:         path.Clean(bucketsPath),
 		dispatcher:          dispatcher,
