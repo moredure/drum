@@ -127,43 +127,26 @@ func (d *DRUM) sortMergeBuffer() {
 
 func (d *DRUM) synchronizeWithDisk() {
 	for _, e := range d.sortedMergeBuffer {
-		switch e.Op {
-		case check:
-			if d.db.Has(e.Key) {
-				e.Value = d.db.Get(e.Key)
-				e.Result = duplicateKey
-			} else {
-				e.Result = uniqueKey
-			}
-		case checkUpdate:
+		if check == e.Op || checkUpdate == e.Op {
 			if d.db.Has(e.Key) {
 				e.Result = duplicateKey
-				if bytes.Equal(d.db.Get(e.Key), e.Value) { // TODO maybe not needed
-					break
+				if check == e.Op {
+					e.Value = d.db.Get(e.Key)
+				} else if bytes.Equal(d.db.Get(e.Key), e.Value) {
+					continue
 				}
 			} else {
 				e.Result = uniqueKey
 			}
-			fallthrough
-		case update:
+		}
+		if update == e.Op || checkUpdate == e.Op {
 			d.db.Put(e.Key, e.Value)
-		default:
-			panic("not implemented")
 		}
 	}
 	d.db.Sync()
 }
 
-//if check == e.Op || checkUpdate == e.Op {
-//	if !d.db.Has(e.Key) {
-//		e.Result = uniqueKey
-//	} else if e.Result = duplicateKey; check == e.Op {
-//		e.Value = d.db.Get(e.Key)
-//	}
-//}
-//if update == e.Op || checkUpdate == e.Op {
-//	d.db.Put(e.Key, e.Value)
-//}
+
 
 func (d *DRUM) unsortMergeBuffer() {
 	if cap(d.unsortingHelper) < len(d.sortedMergeBuffer) {
