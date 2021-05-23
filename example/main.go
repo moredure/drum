@@ -19,7 +19,7 @@ func main() {
 			panic(err)
 		}
 	}()
-	db := &db{
+	db := &pebbleDB{
 		db: pdb,
 	}
 	counter := 0
@@ -41,12 +41,12 @@ func main() {
 	fmt.Println(counter == 100)
 }
 
-type db struct {
+type pebbleDB struct {
 	key [8]byte
 	db  *pebble.DB
 }
 
-func (d *db) Has(u uint64) bool {
+func (d *pebbleDB) Has(u uint64) bool {
 	binary.BigEndian.PutUint64(d.key[:], u)
 	_, closer, err := d.db.Get(d.key[:])
 	if err == pebble.ErrNotFound {
@@ -61,7 +61,7 @@ func (d *db) Has(u uint64) bool {
 	return true
 }
 
-func (d *db) Put(u uint64, s []byte) {
+func (d *pebbleDB) Put(u uint64, s []byte) {
 	binary.BigEndian.PutUint64(d.key[:], u)
 	err := d.db.Set(d.key[:], s, pebble.NoSync)
 	if err != nil {
@@ -70,7 +70,7 @@ func (d *db) Put(u uint64, s []byte) {
 	return
 }
 
-func (d *db) Get(u uint64) []byte {
+func (d *pebbleDB) Get(u uint64) []byte {
 	binary.BigEndian.PutUint64(d.key[:], u)
 	us, closer, err := d.db.Get(d.key[:])
 	if err == pebble.ErrNotFound {
@@ -83,7 +83,7 @@ func (d *db) Get(u uint64) []byte {
 	return bytes.Repeat(us, 1)
 }
 
-func (d *db) Sync() {
+func (d *pebbleDB) Sync() {
 	if err := d.db.Flush(); err != nil {
 		panic(err)
 	}
