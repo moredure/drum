@@ -13,9 +13,9 @@ import (
 
 const buckets = 8
 
-const size = 1024*1024
+const size = 1024 * 1024
 
-const elements = 32*1024
+const elements = 32 * 1024
 
 func main() {
 	pdb, err := pebble.Open("/tmp/database", nil)

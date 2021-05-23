@@ -92,6 +92,7 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 		if position >= d.currentPointers[bucket].Kv {
 			break
 		}
+
 		e := &element{
 			Position: len(d.sortedMergeBuffer),
 		}
@@ -173,6 +174,7 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 		if position >= d.currentPointers[bucket].Aux {
 			break
 		}
+
 		if _, err := aux.Read(d.buf[:4]); err != nil {
 			panic(err)
 		}
@@ -336,7 +338,7 @@ func (d *DRUM) feedBucket(bucket int) {
 	if err != nil {
 		panic(err)
 	}
-	
+
 	if _, err := kv.Seek(d.currentPointers[bucket].Kv, io.SeekCurrent); err != nil {
 		panic(err)
 	}
@@ -351,10 +353,12 @@ func (d *DRUM) feedBucket(bucket int) {
 		if _, err := kv.Write(d.buf[0:1]); err != nil {
 			panic(err)
 		}
+
 		binary.BigEndian.PutUint64(d.buf[:], e.Key)
 		if _, err := kv.Write(d.buf[:]); err != nil {
 			panic(err)
 		}
+
 		binary.BigEndian.PutUint32(d.buf[:4], uint32(len(e.Value)))
 		if _, err := kv.Write(d.buf[:4]); err != nil {
 			panic(err)
