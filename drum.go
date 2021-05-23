@@ -73,10 +73,6 @@ func (d *DRUM) Sync() {
 	d.mergeBuckets()
 }
 
-func (d *DRUM) getBucketOfKey(key uint64) int {
-	return int(key >> d.shift)
-}
-
 func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 	kv, err := os.OpenFile(d.fileNames[bucket].Kv, os.O_RDONLY, 0)
 	if err != nil {
@@ -148,10 +144,10 @@ func (d *DRUM) synchronizeWithDisk() {
 }
 
 func (d *DRUM) unsortMergeBuffer() {
-	if cap(d.unsortingHelper) >= len(d.sortedMergeBuffer) {
-		d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)]
-	} else {
+	if cap(d.unsortingHelper) < len(d.sortedMergeBuffer) {
 		d.unsortingHelper = append(d.unsortingHelper, make([]int, len(d.sortedMergeBuffer)-len(d.unsortingHelper))...)
+	} else {
+		d.unsortingHelper = d.unsortingHelper[:len(d.sortedMergeBuffer)]
 	}
 	for i := range d.sortedMergeBuffer {
 		d.unsortingHelper[d.sortedMergeBuffer[i].Position] = i
@@ -190,10 +186,7 @@ func (d *DRUM) readAuxBucketForDispatching(bucket int) {
 
 func (d *DRUM) dispatch() {
 	for i, idx := range d.unsortingHelper {
-		e := d.sortedMergeBuffer[idx]
-		aux := d.unsortedAuxBuffer[i]
-
-		if check == e.Op && uniqueKey == e.Result {
+		if aux, e := d.unsortedAuxBuffer[i], d.sortedMergeBuffer[idx]; check == e.Op && uniqueKey == e.Result {
 			d.dispatcher.UniqueKeyCheckEvent(&UniqueKeyCheckEvent{
 				Key: e.Key,
 				Aux: aux,
@@ -260,29 +253,32 @@ func (d *DRUM) mergeBuckets() {
 		d.dispatch()
 		d.resetSynchronizationBuffers()
 	}
-
 	d.resetFilePointers()
 	d.merge = false
 }
 
-func (d *DRUM) getBucketAndBufferPosition(key uint64) (bucket, position int) {
+func (d *DRUM) getBucketOfKey(key uint64) uint64 {
+	return key >> d.shift
+}
+
+func (d *DRUM) getBucketAndBufferPosition(key uint64) (bucket uint64, position int) {
 	bucket = d.getBucketOfKey(key)
 	position = d.nextBufferPosisions[bucket]
-	d.nextBufferPosisions[bucket] += 1
+	d.nextBufferPosisions[bucket] = position + 1
 	if d.nextBufferPosisions[bucket] == d.elements {
 		d.feed = true
 	}
 	return
 }
 
-func (d *DRUM) add(key uint64, value []byte, op byte) (int, int) {
-	bucket, position := d.getBucketAndBufferPosition(key)
+func (d *DRUM) add(key uint64, value []byte, op byte) (bucket uint64, position int) {
+	bucket, position = d.getBucketAndBufferPosition(key)
 	d.kvBuffers[bucket][position] = &element{
 		Key:   key,
 		Value: value,
 		Op:    op,
 	}
-	return bucket, position
+	return
 }
 
 func (d *DRUM) checkTimeToFeed() {
@@ -293,7 +289,7 @@ func (d *DRUM) checkTimeToFeed() {
 }
 
 func (d *DRUM) resetNextBufferPositions() {
-	for bucket := 0; bucket < d.buckets; bucket += 1 {
+	for bucket := range d.nextBufferPosisions {
 		d.nextBufferPosisions[bucket] = 0
 	}
 }
@@ -414,7 +410,7 @@ func Open(bucketsPath string, buckets, elements int, size int64, db DB, dispatch
 		nextBufferPosisions: make([]int, buckets),
 	}
 	d.auxBuffers, d.kvBuffers = make([][][]byte, buckets), make([][]*element, buckets)
-	for i := 0; i < buckets; i += 1 {
+	for i := range d.auxBuffers {
 		d.auxBuffers[i], d.kvBuffers[i] = make([][]byte, elements), make([]*element, elements)
 	}
 	d.resetSynchronizationBuffers()

@@ -1,3 +1,5 @@
+//go:generate bash init.sh
+
 package main
 
 import (
@@ -8,6 +10,12 @@ import (
 	"github.com/moredure/drum"
 	"strconv"
 )
+
+const buckets = 8
+
+const size = 1024*1024
+
+const elements = 32*1024
 
 func main() {
 	pdb, err := pebble.Open("/tmp/database", nil)
@@ -33,7 +41,7 @@ func main() {
 		case *drum.UpdateEvent:
 		}
 	})
-	dr := drum.Open("/tmp/buckets", 8, 32*1024, 1024*1024, db, dispatcherFunc)
+	dr := drum.Open("/tmp/buckets", buckets, elements, size, db, dispatcherFunc)
 	for i := 0; i < 100; i += 1 {
 		dr.CheckUpdate(uint64(i), []byte(strconv.Itoa(i)), nil)
 	}
