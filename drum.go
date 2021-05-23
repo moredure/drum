@@ -1,6 +1,7 @@
 package drum
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"math"
@@ -112,7 +113,6 @@ func (d *DRUM) readInfoBucketIntoMergeBuffer(bucket int) {
 			panic(err)
 		}
 		e.Value = make([]byte, binary.BigEndian.Uint32(d.buf[:4]))
-
 		if _, err := kv.Read(e.Value); err != nil {
 			panic(err)
 		}
@@ -127,22 +127,43 @@ func (d *DRUM) sortMergeBuffer() {
 
 func (d *DRUM) synchronizeWithDisk() {
 	for _, e := range d.sortedMergeBuffer {
-		if check == e.Op || checkUpdate == e.Op {
-			if !d.db.Has(e.Key) {
-				e.Result = uniqueKey
-			} else {
+		switch e.Op {
+		case check:
+			if d.db.Has(e.Key) {
+				e.Value = d.db.Get(e.Key)
 				e.Result = duplicateKey
-				if check == e.Op {
-					e.Value = d.db.Get(e.Key)
-				}
+			} else {
+				e.Result = uniqueKey
 			}
-		}
-		if update == e.Op || checkUpdate == e.Op {
+		case checkUpdate:
+			if d.db.Has(e.Key) {
+				e.Result = duplicateKey
+				if bytes.Equal(d.db.Get(e.Key), e.Value) { // TODO maybe not needed
+					break
+				}
+			} else {
+				e.Result = uniqueKey
+			}
+			fallthrough
+		case update:
 			d.db.Put(e.Key, e.Value)
+		default:
+			panic("not implemented")
 		}
 	}
 	d.db.Sync()
 }
+
+//if check == e.Op || checkUpdate == e.Op {
+//	if !d.db.Has(e.Key) {
+//		e.Result = uniqueKey
+//	} else if e.Result = duplicateKey; check == e.Op {
+//		e.Value = d.db.Get(e.Key)
+//	}
+//}
+//if update == e.Op || checkUpdate == e.Op {
+//	d.db.Put(e.Key, e.Value)
+//}
 
 func (d *DRUM) unsortMergeBuffer() {
 	if cap(d.unsortingHelper) < len(d.sortedMergeBuffer) {
@@ -385,7 +406,6 @@ func (d *DRUM) feedBucket(bucket int) {
 	if err != nil {
 		panic(err)
 	}
-
 	if d.currentPointers[bucket].Kv-kvBegin > d.size || d.currentPointers[bucket].Aux-auxBegin > d.size {
 		d.merge = true
 	}
