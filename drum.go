@@ -130,11 +130,8 @@ func (d *DRUM) synchronizeWithDisk() {
 		if check == e.Op || checkUpdate == e.Op {
 			if d.db.Has(e.Key) {
 				e.Result = duplicateKey
-				old := d.db.Get(e.Key)
 				if check == e.Op {
-					e.Value = old
-				} else if bytes.Equal(old, e.Value) {
-					continue
+					e.Value = d.db.Get(e.Key)
 				}
 			} else {
 				e.Result = uniqueKey
